@@ -1,0 +1,29 @@
+name: Update Documentation
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master]
+
+jobs:
+  update-docs:
+    # Only run if PR was merged (not just closed)
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger docs update
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.DOCS_REPO_PAT }}
+          repository: shrimbly/openflows-docs
+          event-type: source-pr-merged
+          client-payload: |
+            {
+              "pr_number": "${{ github.event.pull_request.number }}",
+              "pr_title": "${{ github.event.pull_request.title }}",
+              "pr_body": ${{ toJson(github.event.pull_request.body) }},
+              "pr_url": "${{ github.event.pull_request.html_url }}",
+              "merged_by": "${{ github.event.pull_request.merged_by.login }}",
+              "head_sha": "${{ github.event.pull_request.merge_commit_sha }}"
+            }
