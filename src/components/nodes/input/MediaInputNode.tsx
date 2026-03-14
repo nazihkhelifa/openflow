@@ -651,7 +651,7 @@ export function MediaInputNode({ id, data, selected }: NodeProps<MediaInputNodeT
                   <GLBAutoRotate enabled={autoRotate && !isInteracting} />
                   <GLBCaptureHelper captureRef={glbCaptureRef} />
                 </Canvas>
-                <div className="absolute top-0 left-0 z-10 px-2 py-1.5 flex items-center gap-1.5 pointer-events-none bg-gradient-to-b from-black/50 to-transparent rounded-br">
+                <div className="absolute top-0 left-0 z-10 px-2 py-1.5 flex items-center gap-1.5 pointer-events-none bg-neutral-800/80 rounded-br">
                   <div className="flex items-center gap-1 pointer-events-auto">
                     <button
                       onClick={() => setAutoRotate(!autoRotate)}
