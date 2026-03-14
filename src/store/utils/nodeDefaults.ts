@@ -199,6 +199,7 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         inputImages: [],
         inputPrompt: null,
         output3dUrl: null,
+        capturedImage: null,
         savedFilename: null,
         savedFilePath: null,
         selectedModel: d3Models[d3Idx] ?? d3Models[0] ?? d3Defaults?.selectedModel,

@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
-import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
+import dynamic from "next/dynamic";
+import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "../shared/BaseNode";
-import { ModelParameters } from "../shared/ModelParameters";
 import { useWorkflowStore, useProviderApiKeys } from "@/store/workflowStore";
 import { Generate3DNodeData, ProviderType, SelectedModel, ModelInputDef } from "@/types";
 import { ProviderModel, ModelCapability } from "@/lib/providers/types";
@@ -11,11 +11,14 @@ import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { useToast } from "@/components/Toast";
 import { ProviderBadge } from "../shared/ProviderBadge";
 import { getModelPageUrl, getProviderDisplayName } from "@/utils/providerUrls";
-import { useInlineParameters } from "@/hooks/useInlineParameters";
-import { InlineParameterPanel } from "../shared/InlineParameterPanel";
 import { NodeRunButton } from "../shared/NodeRunButton";
 import { ConnectedImageThumbnails } from "../shared/ConnectedImageThumbnails";
 import { Generate3DToolbar } from "./Generate3DToolbar";
+
+const InlineGLBViewer = dynamic(
+  () => import("../shared/InlineGLBViewer").then((m) => ({ default: m.InlineGLBViewer })),
+  { ssr: false }
+);
 
 // 3D generation capabilities
 const THREE_D_CAPABILITIES: ModelCapability[] = ["text-to-3d", "image-to-3d"];
@@ -27,9 +30,6 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const { replicateApiKey, falApiKey, kieApiKey } = useProviderApiKeys();
   const [isBrowseDialogOpen, setIsBrowseDialogOpen] = useState(false);
-
-  // Inline parameters infrastructure
-  const { inlineParametersEnabled } = useInlineParameters();
 
   // Get the current selected provider (default to fal since most 3D models are there)
   const currentProvider: ProviderType = nodeData.selectedModel?.provider || "fal";
@@ -47,25 +47,6 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
       updateNodeData(id, { inputSchema: inputs });
     },
     [id, updateNodeData]
-  );
-
-  // Handle parameters expand/collapse - resize node height
-  const { setNodes } = useReactFlow();
-  const handleParametersExpandChange = useCallback(
-    (expanded: boolean, parameterCount: number) => {
-      const parameterHeight = expanded ? Math.max(parameterCount * 28 + 16, 60) : 0;
-      const baseHeight = 300;
-      const newHeight = baseHeight + parameterHeight;
-
-      setNodes((nodes) =>
-        nodes.map((node) =>
-          node.id === id
-            ? { ...node, style: { ...node.style, height: newHeight } }
-            : node
-        )
-      );
-    },
-    [id, setNodes]
   );
 
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
@@ -94,13 +75,6 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
     return "Select 3D model...";
   }, [nodeData.selectedModel?.displayName, nodeData.selectedModel?.modelId]);
 
-  // Inline parameters: compute collapse state and toggle handler
-  const isParamsExpanded = nodeData.parametersExpanded ?? true; // default expanded
-
-  const handleToggleParams = useCallback(() => {
-    updateNodeData(id, { parametersExpanded: !isParamsExpanded });
-  }, [id, isParamsExpanded, updateNodeData]);
-
   // Track previous status to detect error transitions
   const prevStatusRef = useRef(nodeData.status);
 
@@ -112,8 +86,31 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
     prevStatusRef.current = nodeData.status;
   }, [nodeData.status, nodeData.error]);
 
+  const captureRef = useRef<(() => string | null) | null>(null);
+  const [autoRotate, setAutoRotate] = useState(false);
+
   const handleClear3D = useCallback(() => {
-    updateNodeData(id, { output3dUrl: null, savedFilename: null, savedFilePath: null, status: "idle", error: null });
+    updateNodeData(id, {
+      output3dUrl: null,
+      savedFilename: null,
+      savedFilePath: null,
+      capturedImage: null,
+      status: "idle",
+      error: null,
+    });
+  }, [id, updateNodeData]);
+
+  const handleCapture = useCallback(() => {
+    const dataUrl = captureRef.current?.() ?? null;
+    if (dataUrl) {
+      updateNodeData(id, { capturedImage: dataUrl });
+    } else {
+      useToast.getState().show("Failed to capture 3D view", "error");
+    }
+  }, [id, updateNodeData]);
+
+  const handleClearCapture = useCallback(() => {
+    updateNodeData(id, { capturedImage: null });
   }, [id, updateNodeData]);
 
   return (
@@ -122,46 +119,11 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
     <BaseNode
       id={id}
       selected={selected}
-      settingsExpanded={inlineParametersEnabled && isParamsExpanded}
       isExecuting={isRunning}
       hasError={nodeData.status === "error"}
+      fullBleed
       footerRight={<NodeRunButton nodeId={id} disabled={isRunning} />}
-      settingsPanel={inlineParametersEnabled ? (
-        <InlineParameterPanel
-          expanded={isParamsExpanded}
-          onToggle={handleToggleParams}
-          nodeId={id}
-        >
-          {/* Model selector: Browse button + current model display */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <div className="text-[11px] text-neutral-200 truncate">
-                {displayTitle}
-              </div>
-              <div className="text-[9px] text-neutral-500">
-                {currentProvider}
-              </div>
-            </div>
-            <button
-              onClick={() => setIsBrowseDialogOpen(true)}
-              className="nodrag nopan shrink-0 px-2 py-1 text-[10px] bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 rounded text-neutral-300 transition-colors"
-            >
-              Browse
-            </button>
-          </div>
-
-          {/* External provider parameters - reuse ModelParameters component */}
-          {nodeData.selectedModel?.modelId && (
-            <ModelParameters
-              modelId={nodeData.selectedModel.modelId}
-              provider={currentProvider}
-              parameters={nodeData.parameters || {}}
-              onParametersChange={handleParametersChange}
-              onInputsLoaded={handleInputsLoaded}
-            />
-          )}
-        </InlineParameterPanel>
-      ) : undefined}
+      contentClassName="pt-0 px-0 pb-4 flex-1 min-h-0 flex flex-col"
     >
       {/* Dynamic input handles based on model schema */}
       {nodeData.inputSchema && nodeData.inputSchema.length > 0 ? (
@@ -315,69 +277,121 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
         type="source"
         position={Position.Right}
         id="3d"
+        style={{ top: "40%" }}
         data-handletype="3d"
       />
-      {/* Output label */}
       <div
         className="handle-label absolute text-[10px] font-medium whitespace-nowrap pointer-events-none"
         style={{
           left: `calc(100% + 8px)`,
-          top: "calc(50% - 18px)",
+          top: "calc(40% - 18px)",
           color: "var(--handle-color-3d)",
         }}
       >
         3D
       </div>
+      {/* Image output (captured view) — same as 3D Viewer */}
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="image"
+        style={{ top: "60%" }}
+        data-handletype="image"
+      />
+      <div
+        className="handle-label absolute text-[10px] font-medium whitespace-nowrap pointer-events-none"
+        style={{
+          left: `calc(100% + 8px)`,
+          top: "calc(60% - 18px)",
+          color: "var(--handle-color-image)",
+        }}
+      >
+        Image
+      </div>
 
-      <div className="flex-1 flex flex-col min-h-0 gap-2 relative">
+      <div className="flex-1 flex flex-col min-h-0 relative">
         {/* Connected image thumbnails */}
         <div className="absolute bottom-2 left-2 z-[5]">
           <ConnectedImageThumbnails nodeId={id} />
         </div>
-        {/* Preview area */}
+        {/* Preview area: inline 3D viewer when model is generated */}
         {nodeData.output3dUrl ? (
-          <div className="relative w-full flex-1 min-h-[80px] flex flex-col items-center justify-center gap-2 bg-neutral-800 rounded border border-neutral-700 p-3">
-            <svg className="w-8 h-8 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-2.25-1.313M21 7.5v2.25m0-2.25l-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3l2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75l2.25-1.313M12 21.75V19.5m0 2.25l-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
-            </svg>
-            <span className="text-[11px] text-orange-400 font-medium">3D Model Generated</span>
-            {nodeData.savedFilename ? (
-              <button
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  if (!nodeData.savedFilePath) {
-                    useToast.getState().show("No file path available", "error");
-                    return;
-                  }
-                  try {
-                    const res = await fetch("/api/open-file", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ filePath: nodeData.savedFilePath }),
-                    });
-                    if (!res.ok) {
-                      const detail = await res.text().catch(() => `Status ${res.status}`);
-                      useToast.getState().show("Failed to open file", "error", true, detail);
-                    }
-                  } catch (err) {
-                    console.error("Failed to open file location:", err);
-                    useToast.getState().show("Failed to open file location", "error");
-                  }
-                }}
-                className="nodrag nopan text-[10px] text-neutral-400 hover:text-orange-300 truncate max-w-full cursor-pointer transition-colors flex items-center gap-1"
-                title={`Open in explorer: ${nodeData.savedFilePath}`}
-              >
-                <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                </svg>
-                {nodeData.savedFilename}
-              </button>
-            ) : (
-              <span className="text-[10px] text-neutral-500 truncate max-w-full">Connect to 3D Viewer</span>
-            )}
+          <>
+          <div className="relative w-full flex-1 min-h-[120px] flex flex-col overflow-hidden">
+            <InlineGLBViewer
+              glbUrl={nodeData.output3dUrl}
+              className="flex-1 w-full"
+              minHeight={120}
+              captureRef={captureRef}
+              autoRotate={autoRotate}
+              onError={() => {
+                useToast.getState().show("Failed to load 3D model", "error");
+              }}
+            />
+            {/* Controls bar — same as 3D Viewer: filename, auto-rotate, capture */}
+            <div className="absolute bottom-0 left-0 right-0 z-10 px-3 py-1.5 flex items-center justify-between gap-1 pointer-events-none bg-gradient-to-t from-black/60 to-transparent">
+              <div className="flex items-center gap-1.5 min-w-0 pointer-events-auto">
+                {nodeData.savedFilename && (
+                  <button
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!nodeData.savedFilePath) {
+                        useToast.getState().show("No file path available", "error");
+                        return;
+                      }
+                      try {
+                        const res = await fetch("/api/open-file", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ filePath: nodeData.savedFilePath }),
+                        });
+                        if (!res.ok) {
+                          const detail = await res.text().catch(() => `Status ${res.status}`);
+                          useToast.getState().show("Failed to open file", "error", true, detail);
+                        }
+                      } catch (err) {
+                        console.error("Failed to open file location:", err);
+                        useToast.getState().show("Failed to open file location", "error");
+                      }
+                    }}
+                    className="nodrag nopan text-[10px] text-neutral-400 hover:text-orange-300 truncate max-w-[100px] cursor-pointer transition-colors"
+                    title={`Open: ${nodeData.savedFilePath}`}
+                  >
+                    {nodeData.savedFilename}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setAutoRotate((v) => !v)}
+                  title={autoRotate ? "Stop auto-rotate" : "Auto-rotate"}
+                  className={`nodrag nopan p-0.5 rounded transition-colors ${
+                    autoRotate ? "text-cyan-400 bg-cyan-400/10" : "text-neutral-500 hover:text-neutral-300"
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex items-center gap-1 shrink-0 pointer-events-auto">
+                <button
+                  type="button"
+                  onClick={handleCapture}
+                  title="Capture current view as image"
+                  className="nodrag nopan flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium text-neutral-300 hover:text-neutral-100 bg-neutral-700 hover:bg-neutral-600 rounded transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+                  </svg>
+                  Capture
+                </button>
+              </div>
+            </div>
             {/* Loading overlay for re-generation */}
             {nodeData.status === "loading" && (
-              <div className="absolute inset-0 bg-neutral-900/70 rounded flex items-center justify-center">
+              <div className="absolute inset-0 bg-neutral-900/70 flex items-center justify-center z-20">
                 <svg
                   className="w-6 h-6 animate-spin text-white"
                   fill="none"
@@ -390,7 +404,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
             )}
             {/* Error overlay */}
             {nodeData.status === "error" && (
-              <div className="absolute inset-0 bg-red-900/40 rounded flex flex-col items-center justify-center gap-1">
+              <div className="absolute inset-0 bg-red-900/40 flex flex-col items-center justify-center gap-1 z-20">
                 <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -398,10 +412,10 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
                 <span className="text-white/70 text-[10px]">See toast for details</span>
               </div>
             )}
-            <div className="absolute top-1 right-1">
+            <div className="absolute top-1 right-1 z-20">
               <button
                 onClick={handleClear3D}
-                className="w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
+                className="w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors nodrag nopan"
                 title="Clear 3D model"
               >
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -410,8 +424,31 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
               </button>
             </div>
           </div>
+          {nodeData.capturedImage && (
+            <div className="px-3 py-1.5 shrink-0">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] text-green-400 flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  Captured
+                </span>
+                <button
+                  type="button"
+                  onClick={handleClearCapture}
+                  className="nodrag nopan text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
+              <img
+                src={nodeData.capturedImage}
+                alt="Captured 3D view"
+                className="w-full rounded border border-neutral-700 bg-neutral-900"
+              />
+            </div>
+          )}
+          </>
         ) : (
-          <div className="w-full flex-1 min-h-[112px] border border-dashed border-neutral-600 rounded flex flex-col items-center justify-center">
+          <div className="w-full flex-1 min-h-[112px] bg-neutral-900/40 flex flex-col items-center justify-center">
             {nodeData.status === "loading" ? (
               <svg
                 className="w-4 h-4 animate-spin text-neutral-400"
@@ -431,18 +468,6 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
               </span>
             )}
           </div>
-        )}
-
-        {/* Model-specific parameters (hidden when inline enabled - shown in panel below) */}
-        {!inlineParametersEnabled && nodeData.selectedModel?.modelId && (
-          <ModelParameters
-            modelId={nodeData.selectedModel.modelId}
-            provider={currentProvider}
-            parameters={nodeData.parameters || {}}
-            onParametersChange={handleParametersChange}
-            onExpandChange={handleParametersExpandChange}
-            onInputsLoaded={handleInputsLoaded}
-          />
         )}
 
       </div>

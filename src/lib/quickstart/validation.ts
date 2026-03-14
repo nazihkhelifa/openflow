@@ -292,6 +292,7 @@ function createDefaultNodeData(type: NodeType): WorkflowNodeData {
         inputImages: [],
         inputPrompt: null,
         output3dUrl: null,
+        capturedImage: null,
         savedFilename: null,
         savedFilePath: null,
         selectedModel: undefined,

@@ -435,6 +435,7 @@ export function MediaInputNode({ id, data, selected }: NodeProps<MediaInputNodeT
     <BaseNode
       id={id}
       selected={selected}
+      fullBleed
       contentClassName="flex-1 min-h-0 overflow-clip flex flex-col"
       aspectFitMedia={aspectFitMedia}
       minWidth={250}
@@ -555,64 +556,57 @@ export function MediaInputNode({ id, data, selected }: NodeProps<MediaInputNodeT
         </>
       )}
 
-      {/* Audio mode */}
+      {/* Audio mode — waveform fills node; centered play/pause; duration at bottom-right inside node */}
       {hasContent && mode === "audio" && (
         <>
           {nodeData.audioFile ? (
-            <div className="relative group flex-1 flex flex-col min-h-0 gap-2">
-              <div className="flex items-center justify-between shrink-0">
-                <span className="text-[10px] text-neutral-400 truncate max-w-[150px]" title={nodeData.filename || ""}>
-                  {nodeData.filename}
-                </span>
-                {nodeData.duration && (
-                  <span className="text-[10px] text-neutral-500 bg-neutral-700/50 px-1.5 py-0.5 rounded">
-                    {formatTime(nodeData.duration)}
-                  </span>
-                )}
-              </div>
+            <div className="relative group flex-1 flex flex-col min-h-0">
               {isLoading ? (
-                <div className="flex-1 flex items-center justify-center bg-neutral-900/50 rounded min-h-[60px]">
+                <div className="flex-1 flex items-center justify-center bg-neutral-900/50 min-h-[60px]">
                   <span className="text-xs text-neutral-500">Loading waveform...</span>
                 </div>
               ) : waveformData ? (
                 <div
                   ref={waveformContainerRef}
-                  className="flex-1 min-h-[60px] bg-neutral-900/50 rounded cursor-pointer relative nodrag nopan"
+                  className="flex-1 min-h-[60px] bg-neutral-900/50 cursor-pointer relative nodrag nopan"
                   onClick={handleSeek}
                 >
                   <canvas ref={canvasRef} className="w-full h-full" />
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePlayPause();
+                      }}
+                      className="pointer-events-auto w-10 h-10 flex items-center justify-center bg-white/25 hover:bg-white/40 rounded-full transition-colors nodrag nopan"
+                      title={isPlaying ? "Pause" : "Play"}
+                    >
+                      {isPlaying ? (
+                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <div className="flex-1 flex items-center justify-center bg-neutral-900/50 rounded min-h-[60px]">
+                <div className="flex-1 flex items-center justify-center bg-neutral-900/50 min-h-[60px]">
                   <span className="text-xs text-neutral-500">Processing...</span>
                 </div>
               )}
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={handlePlayPause}
-                  className="w-7 h-7 flex items-center justify-center bg-violet-600 hover:bg-violet-500 rounded transition-colors nodrag nopan"
-                  title={isPlaying ? "Pause" : "Play"}
-                >
-                  {isPlaying ? (
-                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  )}
-                </button>
-                <div className="flex-1 h-1 bg-neutral-700 rounded-full overflow-hidden relative">
-                  {audioRef.current?.duration && isFinite(audioRef.current.duration) && (
-                    <div
-                      className="h-full bg-violet-500 transition-all"
-                      style={{ width: `${(currentTime / audioRef.current.duration) * 100}%` }}
-                    />
-                  )}
+              {/* Duration at bottom-right; transparent so node background shows (same as node) */}
+              {nodeData.duration != null && (
+                <div className="flex justify-end shrink-0 pt-0.5 pr-2 bg-transparent">
+                  <span className="text-[10px] text-neutral-400 nodrag nopan">
+                    {formatTime(nodeData.duration)}
+                  </span>
                 </div>
-                <span className="text-[10px] text-neutral-500 min-w-[32px] text-right">{formatTime(currentTime)}</span>
-              </div>
+              )}
             </div>
           ) : null}
         </>
@@ -718,7 +712,7 @@ export function MediaInputNode({ id, data, selected }: NodeProps<MediaInputNodeT
         <Handle type="target" position={Position.Left} id="reference" data-handletype="reference" className="!bg-gray-500" />
       )}
       {mode === "audio" && (
-        <Handle type="target" position={Position.Left} id="audio" data-handletype="audio" style={{ background: "rgb(167, 139, 250)" }} />
+        <Handle type="target" position={Position.Left} id="audio" data-handletype="audio" style={{ background: "rgba(255, 255, 255, 0.9)" }} />
       )}
       {mode === "3d" && (
         <Handle type="target" position={Position.Left} id="3d" data-handletype="3d" style={{ top: "50%" }} />

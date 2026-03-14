@@ -83,19 +83,9 @@ export function useAudioPlayback({ audioSrc, waveformData, isLoadingWaveform }: 
         const barHeight = peak * height;
         const x = i * barWidth;
         const y = (height - barHeight) / 2;
-
-        ctx.fillStyle = x < progressX ? "rgb(139, 92, 246)" : "rgba(139, 92, 246, 0.4)";
+        // Played: solid white; unplayed: same grey level
+        ctx.fillStyle = x < progressX ? "rgb(255, 255, 255)" : "rgba(148, 163, 184, 0.55)";
         ctx.fillRect(x, y, barWidth - barGap, barHeight);
-      }
-
-      // Draw playback position line
-      if (progressX > 0) {
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(progressX, 0);
-        ctx.lineTo(progressX, height);
-        ctx.stroke();
       }
     },
     []

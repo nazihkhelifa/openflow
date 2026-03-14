@@ -111,6 +111,7 @@ export async function executeGenerate3D(
     if (result.success && result.model3dUrl) {
       updateNodeData(node.id, {
         output3dUrl: result.model3dUrl,
+        capturedImage: null,
         status: "complete",
         error: null,
       });

@@ -80,6 +80,9 @@ function getSourceOutput(
     return { type: "image", value: nbData.outputImage };
   } else if (sourceNode.type === "generate3d") {
     const g3dData = sourceNode.data as Generate3DNodeData;
+    if (sourceHandle === "image") {
+      return { type: "image", value: g3dData.capturedImage ?? null };
+    }
     return { type: "3d", value: g3dData.output3dUrl };
   } else if (sourceNode.type === "generateVideo") {
     return { type: "video", value: (sourceNode.data as GenerateVideoNodeData).outputVideo };

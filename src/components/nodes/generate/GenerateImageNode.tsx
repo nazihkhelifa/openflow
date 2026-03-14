@@ -399,6 +399,21 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<GenerateImag
     }
   }, [id, nodeData.imageHistory, nodeData.selectedHistoryIndex, isLoadingCarouselImage, loadImageById, updateNodeData]);
 
+  const handleSelectHistoryIndex = useCallback(
+    async (index: number) => {
+      const history = nodeData.imageHistory || [];
+      if (index < 0 || index >= history.length || isLoadingCarouselImage) return;
+      const item = history[index];
+      setIsLoadingCarouselImage(true);
+      const image = await loadImageById(item.id);
+      setIsLoadingCarouselImage(false);
+      if (image) {
+        updateNodeData(id, { outputImage: image, selectedHistoryIndex: index });
+      }
+    },
+    [id, nodeData.imageHistory, isLoadingCarouselImage, loadImageById, updateNodeData]
+  );
+
   // Handle model selection from browse dialog
   const handleBrowseModelSelect = useCallback((model: ProviderModel) => {
     const newSelectedModel: SelectedModel = {
@@ -473,7 +488,10 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<GenerateImag
   const supportsResolution = currentModelId === "nano-banana-pro" || currentModelId === "nano-banana-2";
   const aspectRatios = currentModelId === "nano-banana-2" ? EXTENDED_ASPECT_RATIOS : BASE_ASPECT_RATIOS;
   const resolutions = currentModelId === "nano-banana-2" ? RESOLUTIONS_NB2 : RESOLUTIONS_PRO;
-  const hasCarouselImages = (nodeData.imageHistory || []).length > 1;
+  // Show history strip whenever this node has a generated image (single or multiple stored)
+  const imageHistory = nodeData.imageHistory || [];
+  const hasCarouselImages = imageHistory.length >= 1;
+  const showHistoryStrip = !!nodeData.outputImage;
 
   // Track previous status to detect error transitions
   const prevStatusRef = useRef(nodeData.status);
@@ -728,7 +746,8 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<GenerateImag
         Image
       </div>
 
-      <div className="relative w-full h-full min-h-0 overflow-hidden rounded-xl">
+      <div className={`flex flex-col flex-1 min-h-0 w-full ${showHistoryStrip ? "rounded-xl overflow-hidden" : ""}`}>
+        <div className={`relative flex-1 min-h-0 overflow-hidden ${showHistoryStrip ? "rounded-t-xl" : "rounded-xl"}`}>
         {/* Connected image thumbnails */}
         <div className="absolute bottom-2 left-2 z-[5]">
           <ConnectedImageThumbnails nodeId={id} />
@@ -859,33 +878,6 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<GenerateImag
             isPromptFocused ? "top-0" : ""
           }`}
         >
-          {nodeData.outputImage && hasCarouselImages && (
-            <div className="flex items-center justify-center gap-2 py-1.5 px-2 shrink-0">
-              <button
-                onClick={handleCarouselPrevious}
-                disabled={isLoadingCarouselImage}
-                className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
-                title="Previous image"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <span className="text-[10px] text-white/70 min-w-[32px] text-center">
-                {(nodeData.selectedHistoryIndex || 0) + 1} / {(nodeData.imageHistory || []).length}
-              </span>
-              <button
-                onClick={handleCarouselNext}
-                disabled={isLoadingCarouselImage}
-                className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
-                title="Next image"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-          )}
           <div className="flex flex-1 flex-col justify-end px-2 pb-2 pt-1 min-h-0">
             <div
               className={`relative flex w-full justify-start transition-all duration-300 ease-out ${
@@ -906,6 +898,65 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<GenerateImag
             </div>
           </div>
         </div>
+        </div>
+        {showHistoryStrip && (() => {
+          const history = imageHistory;
+          const currentIndex = nodeData.selectedHistoryIndex ?? 0;
+          const canGoPrev = history.length > 1 && currentIndex > 0;
+          const canGoNext = history.length > 1 && currentIndex < history.length - 1;
+          return (
+            <div className="nodrag nopan flex items-center justify-center gap-1.5 py-1.5 px-2 shrink-0 border-t border-neutral-700/50 bg-neutral-800/80 rounded-b-xl min-h-[32px]">
+              <button
+                onClick={handleCarouselPrevious}
+                disabled={isLoadingCarouselImage || !canGoPrev}
+                className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
+                title="Previous image"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <div className="flex items-center gap-1">
+                {history.length >= 1 ? (
+                  history.map((_, i) =>
+                    i === currentIndex ? (
+                      <img
+                        key={i}
+                        src={nodeData.outputImage!}
+                        alt=""
+                        className="h-6 w-6 rounded object-cover border border-neutral-600/60 shadow-sm shrink-0"
+                      />
+                    ) : (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => handleSelectHistoryIndex(i)}
+                        className="h-6 w-6 rounded bg-neutral-600/80 hover:bg-neutral-500 border border-neutral-600 shrink-0 transition-colors"
+                        title={`Image ${i + 1}`}
+                      />
+                    )
+                  )
+                ) : (
+                  <img
+                    src={nodeData.outputImage!}
+                    alt=""
+                    className="h-6 w-6 rounded object-cover border border-neutral-600/60 shadow-sm shrink-0"
+                  />
+                )}
+              </div>
+              <button
+                onClick={handleCarouselNext}
+                disabled={isLoadingCarouselImage || !canGoNext}
+                className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
+                title="Next image"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          );
+        })()}
       </div>
 
     </BaseNode>

@@ -224,6 +224,8 @@ export interface Generate3DNodeData extends BaseNodeData {
   inputImageRefs?: string[];
   inputPrompt: string | null;
   output3dUrl: string | null;
+  /** Base64 PNG snapshot of the 3D viewport (same as GLB Viewer capture) */
+  capturedImage: string | null;
   savedFilename: string | null;
   savedFilePath: string | null;
   selectedModel?: SelectedModel;
