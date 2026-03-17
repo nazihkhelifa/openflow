@@ -739,547 +739,718 @@ export function AnnotationModal() {
   ];
 
   return (
-    <div className="fixed inset-0 z-[100] bg-neutral-950 flex flex-col">
-      {/* Top Bar */}
-      <div className="h-14 bg-neutral-900 flex items-center justify-between px-4 border-b border-neutral-800">
-        <div className="flex items-center gap-1.5">
-          {/* Canvas aspect ratio dropdown */}
-          <div className="relative" ref={canvasDropdownRef}>
-            <button
-              onClick={() => setCanvasDropdownOpen((o) => !o)}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded transition-colors text-neutral-300 hover:text-white hover:bg-neutral-800"
-            >
-              <Square className="w-3.5 h-3.5" />
-              <span>{canvasPreset?.label ?? "1:1"}</span>
-              <svg className="w-3 h-3 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            {canvasDropdownOpen && (
-              <div className="absolute left-0 top-full mt-1 z-[110] w-56 max-h-[70vh] overflow-y-auto bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1">
-                {CANVAS_PRESETS.map(({ group, presets }) => (
-                  <div key={group}>
-                    <div className="px-3 py-1.5 text-[10px] font-medium text-neutral-500 uppercase tracking-wide">
-                      {group}
+    <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center">
+      {/* Floating toolbar + layers outside modal */}
+      <div className="pointer-events-none fixed inset-x-0 top-4 z-[120] flex items-start justify-center px-16">
+        {/* Done / Cancel actions */}
+        <div className="pointer-events-auto flex items-center gap-2">
+          <button
+            onClick={handleDone}
+            className="px-3 py-1.5 text-xs font-medium rounded-xl bg-background-flora-green-primary text-text-positive-on-accent hover:bg-background-flora-green-secondary"
+          >
+            Done
+          </button>
+          <button
+            onClick={closeModal}
+            className="px-3 py-1.5 text-xs font-medium rounded-xl text-text-2 hover:text-text-1 hover:bg-white/5"
+          >
+            Cancel
+          </button>
+        </div>
+
+        {/* Toolbar - centered above canvas, FloatingActionBar style */}
+        <div className="pointer-events-auto flex-1 flex justify-center">
+          <div
+            className="flex items-center gap-1 rounded-full px-2 py-1 backdrop-blur-[16px]"
+            style={{ backgroundColor: "var(--background-transparent-black-default)" }}
+          >
+            {/* Canvas aspect ratio dropdown */}
+            <div className="relative" ref={canvasDropdownRef}>
+              <button
+                onClick={() => setCanvasDropdownOpen((o) => !o)}
+                className="flex h-8 items-center gap-2 rounded-xl px-3 py-1.5 text-xs font-medium text-icon-1 hover:bg-white/5"
+              >
+                <Square className="w-3.5 h-3.5" />
+                <span>{canvasPreset?.label ?? "1:1"}</span>
+                <svg className="w-3 h-3 text-icon-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {canvasDropdownOpen && (
+                <div className="absolute right-0 top-full mt-1 z-[130] w-56 max-h-[70vh] overflow-y-auto rounded-2xl border border-border-transparent-secondary bg-background-transparent-black shadow-xl py-1 f-effect-backdrop-blur-lg">
+                  {CANVAS_PRESETS.map(({ group, presets }) => (
+                    <div key={group}>
+                      <div className="px-3 py-1.5 text-[10px] font-medium text-text-3 uppercase tracking-wide">
+                        {group}
+                      </div>
+                      {presets.map((preset) => {
+                        const isSelected = canvasPresetId === preset.id;
+                        const Icon =
+                          preset.width === preset.height
+                            ? Square
+                            : preset.width > preset.height
+                              ? RectangleHorizontal
+                              : RectangleVertical;
+                        return (
+                          <button
+                            key={preset.id}
+                            onClick={() => {
+                              setCanvasPreset(preset.id);
+                              setCanvasDropdownOpen(false);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-white/5 transition-colors"
+                          >
+                            <Icon className="w-3.5 h-3.5 text-icon-2 shrink-0" />
+                            <span className="flex-1 text-text-2">{preset.label}</span>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-icon-1 shrink-0" />}
+                          </button>
+                        );
+                      })}
                     </div>
-                    {presets.map((preset) => {
-                      const isSelected = canvasPresetId === preset.id;
-                      const Icon =
-                        preset.width === preset.height
-                          ? Square
-                          : preset.width > preset.height
-                            ? RectangleHorizontal
-                            : RectangleVertical;
-                      return (
-                        <button
-                          key={preset.id}
-                          onClick={() => {
-                            setCanvasPreset(preset.id);
-                            setCanvasDropdownOpen(false);
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-neutral-700 transition-colors"
-                        >
-                          <Icon className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-                          <span className="flex-1">{preset.label}</span>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-white shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
-          <div className="w-px h-6 bg-neutral-700 mx-1" />
+            <div className="mx-1 h-4 w-px bg-border-transparent" />
 
-          <button onClick={undo} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white">Undo</button>
-          <button onClick={redo} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white">Redo</button>
+            <button
+              onClick={undo}
+              className="flex h-8 items-center justify-center rounded-xl px-3 text-xs text-icon-2 hover:bg-white/5"
+            >
+              Undo
+            </button>
+            <button
+              onClick={redo}
+              className="flex h-8 items-center justify-center rounded-xl px-3 text-xs text-icon-2 hover:bg-white/5"
+            >
+              Redo
+            </button>
 
-          <div className="w-px h-6 bg-neutral-700 mx-3" />
+            <div className="mx-1 h-4 w-px bg-border-transparent" />
 
-          <button onClick={clearAnnotations} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-red-400">Clear</button>
+            <button
+              onClick={clearAnnotations}
+              className="flex h-8 items-center justify-center rounded-xl px-3 text-xs text-danger-secondary hover:bg-danger-secondary/80"
+            >
+              Clear
+            </button>
 
-          <div className="w-px h-6 bg-neutral-700 mx-3" />
+            <div className="mx-1 h-4 w-px bg-border-transparent" />
 
-          <button onClick={() => selectedLayerId && copyLayers([selectedLayerId])} disabled={!selectedLayerId} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white disabled:opacity-40" title="Copy (Ctrl+C)">
-            <Copy className="w-3.5 h-3.5" />
-          </button>
-          <button onClick={pasteLayers} disabled={clipboard.length === 0} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white disabled:opacity-40" title="Paste (Ctrl+V)">
-            <Clipboard className="w-3.5 h-3.5" />
-          </button>
+            <button
+              onClick={() => selectedLayerId && copyLayers([selectedLayerId])}
+              disabled={!selectedLayerId}
+              className="flex h-8 w-8 items-center justify-center rounded-xl text-icon-2 hover:bg-white/5 disabled:opacity-40"
+              title="Copy (Ctrl+C)"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={pasteLayers}
+              disabled={clipboard.length === 0}
+              className="flex h-8 w-8 items-center justify-center rounded-xl text-icon-2 hover:bg-white/5 disabled:opacity-40"
+              title="Paste (Ctrl+V)"
+            >
+              <Clipboard className="w-3.5 h-3.5" />
+            </button>
 
-          <div className="w-px h-6 bg-neutral-700 mx-3" />
+            <div className="mx-1 h-4 w-px bg-border-transparent" />
 
-          <div className="flex items-center gap-0.5" title="Align to canvas">
-            <button onClick={() => alignSelected("left", stageSize.width, stageSize.height)} disabled={!selectedLayerId} className="px-1.5 py-1 text-[10px] font-medium text-neutral-400 hover:text-white disabled:opacity-40" title="Align left">L</button>
-            <button onClick={() => alignSelected("center", stageSize.width, stageSize.height)} disabled={!selectedLayerId} className="px-1.5 py-1 text-[10px] font-medium text-neutral-400 hover:text-white disabled:opacity-40" title="Align center">C</button>
-            <button onClick={() => alignSelected("right", stageSize.width, stageSize.height)} disabled={!selectedLayerId} className="px-1.5 py-1 text-[10px] font-medium text-neutral-400 hover:text-white disabled:opacity-40" title="Align right">R</button>
-            <button onClick={() => alignSelected("top", stageSize.width, stageSize.height)} disabled={!selectedLayerId} className="px-1.5 py-1 text-[10px] font-medium text-neutral-400 hover:text-white disabled:opacity-40" title="Align top">T</button>
-            <button onClick={() => alignSelected("middle", stageSize.width, stageSize.height)} disabled={!selectedLayerId} className="px-1.5 py-1 text-[10px] font-medium text-neutral-400 hover:text-white disabled:opacity-40" title="Align middle">M</button>
-            <button onClick={() => alignSelected("bottom", stageSize.width, stageSize.height)} disabled={!selectedLayerId} className="px-1.5 py-1 text-[10px] font-medium text-neutral-400 hover:text-white disabled:opacity-40" title="Align bottom">B</button>
+            <div className="flex items-center gap-0.5" title="Align to canvas">
+              <button
+                onClick={() => alignSelected("left", stageSize.width, stageSize.height)}
+                disabled={!selectedLayerId}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-[10px] font-medium text-text-3 hover:bg-white/5 hover:text-text-1 disabled:opacity-40"
+                title="Align left"
+              >
+                L
+              </button>
+              <button
+                onClick={() => alignSelected("center", stageSize.width, stageSize.height)}
+                disabled={!selectedLayerId}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-[10px] font-medium text-text-3 hover:bg-white/5 hover:text-text-1 disabled:opacity-40"
+                title="Align center"
+              >
+                C
+              </button>
+              <button
+                onClick={() => alignSelected("right", stageSize.width, stageSize.height)}
+                disabled={!selectedLayerId}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-[10px] font-medium text-text-3 hover:bg-white/5 hover:text-text-1 disabled:opacity-40"
+                title="Align right"
+              >
+                R
+              </button>
+              <button
+                onClick={() => alignSelected("top", stageSize.width, stageSize.height)}
+                disabled={!selectedLayerId}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-[10px] font-medium text-text-3 hover:bg-white/5 hover:text-text-1 disabled:opacity-40"
+                title="Align top"
+              >
+                T
+              </button>
+              <button
+                onClick={() => alignSelected("middle", stageSize.width, stageSize.height)}
+                disabled={!selectedLayerId}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-[10px] font-medium text-text-3 hover:bg-white/5 hover:text-text-1 disabled:opacity-40"
+                title="Align middle"
+              >
+                M
+              </button>
+              <button
+                onClick={() => alignSelected("bottom", stageSize.width, stageSize.height)}
+                disabled={!selectedLayerId}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-[10px] font-medium text-text-3 hover:bg-white/5 hover:text-text-1 disabled:opacity-40"
+                title="Align bottom"
+              >
+                B
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative" ref={exportDropdownRef}>
+        {/* Layer Panel - right, FloatingActionBar style shell */}
+        {unifiedLayers.length > 0 && (
+          <aside
+            className="pointer-events-auto ml-auto flex flex-col gap-2 rounded-2xl border border-border-transparent-secondary bg-background-transparent-black p-2 f-effect-backdrop-blur-lg"
+            style={{ backgroundColor: "var(--background-transparent-black-default)" }}
+          >
+            <div className="bg-dark-1 rounded-2xl border border-border-alpha-light-1 overflow-hidden min-h-fit w-full f-effect-backdrop-blur-lg flex flex-col">
+              {/* Header row: LAYERS + zoom like "LAYERS - 100% +" */}
+              <div className="px-2 py-1.5 border-b border-border-alpha-light-1 flex items-center justify-between gap-2 bg-dark-1">
+              <span className="text-[10px] font-medium text-text-3 uppercase tracking-wider">
+                Layers
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setScale(Math.max(scale - 0.1, 0.1))}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-[11px] text-text-3 hover:bg-background-light-alpha-1 hover:text-text-1"
+                  title="Zoom out"
+                >
+                  -
+                </button>
+                <span className="text-[11px] text-text-2 w-10 text-center tabular-nums">
+                  {Math.round(scale * 100)}%
+                </span>
+                <button
+                  onClick={() => setScale(Math.min(scale + 0.1, 5))}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-[11px] text-text-3 hover:bg-background-light-alpha-1 hover:text-text-1"
+                  title="Zoom in"
+                >
+                  +
+                </button>
+              </div>
+              </div>
+              <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-y-none [scrollbar-gutter:stable] bg-dark-2">
+              {[...unifiedLayers].reverse().map((item, reversedIndex) => {
+                const index = unifiedLayers.length - 1 - reversedIndex;
+                const isSelected = selectedLayerId === item.id;
+                const visible = isLayerVisible(item);
+                const locked = isLayerLocked(item);
+                const defaultName = isImageLayer(item)
+                  ? `Image ${index + 1}`
+                  : item.type === "rectangle"
+                    ? "Rectangle"
+                    : item.type === "circle"
+                      ? "Ellipse"
+                      : item.type === "arrow"
+                        ? "Arrow"
+                        : item.type === "freehand"
+                          ? "Path"
+                          : item.type === "text"
+                            ? (item as TextShape).text || "Text"
+                            : "Layer";
+                const layerName = item.name ?? defaultName;
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => currentTool === "select" && !locked && selectLayer(item.id)}
+                    onContextMenu={(e) => handleLayerContextMenu(e, index)}
+                    className={`flex items-center gap-1.5 px-2 py-1.5 cursor-pointer border-b border-[#2d2d2d]/50 transition-colors min-h-[36px] ${
+                      isSelected ? "bg-[#2d5a9e]/40" : "hover:bg-[#2d2d2d]"
+                    } ${!visible ? "opacity-50" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); toggleLayerVisibility(item.id); }}
+                      className="p-0.5 shrink-0 text-neutral-500 hover:text-neutral-300"
+                      title={visible ? "Hide layer" : "Show layer"}
+                    >
+                      {visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); toggleLayerLock(item.id); }}
+                      className="p-0.5 shrink-0 text-neutral-500 hover:text-neutral-300"
+                      title={locked ? "Unlock layer" : "Lock layer"}
+                    >
+                      {locked ? <Lock className="w-3 h-3" /> : <LockOpen className="w-3 h-3" />}
+                    </button>
+                    <div className="w-9 h-9 shrink-0 rounded overflow-hidden bg-[#2d2d2d] flex items-center justify-center">
+                      {isImageLayer(item) ? (
+                        <img src={item.url} alt="" className="w-full h-full object-cover block" />
+                      ) : (
+                        <>
+                          {item.type === "rectangle" && <div className="w-5 h-4 border border-white/60 rounded-sm" />}
+                          {item.type === "circle" && <div className="w-4 h-4 rounded-full border border-white/60" />}
+                          {item.type === "arrow" && <span className="text-white/70 text-sm">→</span>}
+                          {item.type === "freehand" && <span className="text-white/70 text-xs">✎</span>}
+                          {item.type === "text" && <span className="text-white/70 text-[10px] truncate max-w-full px-0.5">T</span>}
+                        </>
+                      )}
+                    </div>
+                    {editingLayerId === item.id ? (
+                      <input
+                        type="text"
+                        value={editingLayerName}
+                        onChange={(e) => setEditingLayerName(e.target.value)}
+                        onBlur={() => {
+                          if (editingLayerName.trim()) renameLayer(item.id, editingLayerName.trim());
+                          setEditingLayerId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            if (editingLayerName.trim()) renameLayer(item.id, editingLayerName.trim());
+                            setEditingLayerId(null);
+                          }
+                          if (e.key === "Escape") setEditingLayerId(null);
+                        }}
+                        autoFocus
+                        className="flex-1 min-w-0 bg-transparent border-none outline-none text-[11px] text-neutral-300 px-0.5"
+                      />
+                    ) : (
+                      <span
+                        className="flex-1 text-[11px] text-neutral-300 truncate"
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          if (!locked) {
+                            setEditingLayerId(item.id);
+                            setEditingLayerName(layerName);
+                          }
+                        }}
+                      >
+                        {layerName}
+                      </span>
+                    )}
+                    {isSelected && (
+                      <select
+                        value={(item as { blendMode?: BlendMode }).blendMode ?? "source-over"}
+                        onChange={(e) => {
+                          const mode = e.target.value as BlendMode;
+                          if (isImageLayer(item)) updateImageLayer(item.id, { blendMode: mode });
+                          else updateAnnotation(item.id, { blendMode: mode });
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="ml-1 text-[10px] bg-neutral-700 border border-neutral-600 rounded px-1 py-0.5 text-neutral-300 max-w-[72px] truncate"
+                        title="Blend mode"
+                      >
+                        {BLEND_MODES.map((bm) => (
+                          <option key={bm.value} value={bm.value}>{bm.label}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                );
+              })}
+              </div>
+            </div>
+          </aside>
+        )}
+      </div>
+
+      {/* Left floating tool palette outside modal, fixed to viewport left-center, matching FloatingActionBar style */}
+      <aside
+        ref={floatingDropdownRef}
+        className="fixed left-4 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center gap-2 rounded-full p-2 backdrop-blur-[16px]"
+        style={{ backgroundColor: "var(--background-transparent-black-default)" }}
+        data-id="annotation-floating-toolbar"
+      >
+            {/* Select - direct button */}
             <button
-              onClick={() => setExportDropdownOpen((o) => !o)}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-neutral-400 hover:text-white rounded"
-              title="Export options"
+              onClick={() => {
+                setCurrentTool("select");
+                setShapesDropdownOpen(false);
+                setShapeOptionsDropdownOpen(false);
+                setSizeDropdownOpen(false);
+              }}
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-xl text-[11px] transition-colors ${
+                currentTool === "select" ? "bg-white/10 text-text-1" : "text-icon-2 hover:bg-white/5"
+              }`}
+              title="Select (V)"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>{exportFormat.toUpperCase()}</span>
+              <MousePointer2 className="w-3.5 h-3.5" />
             </button>
-            {exportDropdownOpen && (
-              <div className="absolute right-0 top-full mt-1 z-[110] w-48 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl py-1">
-                <button onClick={() => { setExportFormat("png"); setExportDropdownOpen(false); }} className={`w-full px-3 py-1.5 text-left text-xs hover:bg-neutral-700 ${exportFormat === "png" ? "text-white" : ""}`}>
-                  PNG
+
+            {/* Shapes dropdown - Rect, Circle, Arrow, Draw */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setShapesDropdownOpen((o) => !o);
+                  setShapeOptionsDropdownOpen(false);
+                  setSizeDropdownOpen(false);
+                }}
+                className={`inline-flex h-8 w-8 items-center justify-center rounded-xl text-[11px] transition-colors ${
+                  ["rectangle", "circle", "arrow", "freehand"].includes(currentTool)
+                    ? "bg-white/10 text-text-1"
+                    : "text-icon-2 hover:bg-white/5"
+                }`}
+                title="Shapes"
+              >
+                {currentTool === "rectangle" ? (
+                  <Square className="w-3.5 h-3.5" />
+                ) : currentTool === "circle" ? (
+                  <CircleIcon className="w-3.5 h-3.5" />
+                ) : currentTool === "arrow" ? (
+                  <ArrowRight className="w-3.5 h-3.5" />
+                ) : currentTool === "freehand" ? (
+                  <Pencil className="w-3.5 h-3.5" />
+                ) : (
+                  <Square className="w-3.5 h-3.5" />
+                )}
+              </button>
+              {shapesDropdownOpen && (
+                <div className="absolute left-full top-0 ml-2 z-[130] min-w-[140px] rounded-2xl border border-border-transparent-secondary bg-background-transparent-black py-1 shadow-xl f-effect-backdrop-blur-lg">
+                  {shapeTools.map((tool) => {
+                    const Icon =
+                      tool.type === "rectangle"
+                        ? Square
+                        : tool.type === "circle"
+                          ? CircleIcon
+                          : tool.type === "arrow"
+                            ? ArrowRight
+                            : Pencil;
+                    const isActive = currentTool === tool.type;
+                    return (
+                      <button
+                        key={tool.type}
+                        onClick={() => {
+                          setCurrentTool(tool.type);
+                          setShapesDropdownOpen(false);
+                        }}
+                        title={`${tool.label} (${tool.shortcut})`}
+                        className={`mx-1 mb-1 flex w-[132px] items-center gap-2 rounded-xl px-3 py-1.5 text-left text-xs transition-colors ${
+                          isActive ? "bg-white/10 text-text-1" : "text-text-2 hover:bg-white/5"
+                        }`}
+                      >
+                        <Icon
+                          className={`h-3.5 w-3.5 shrink-0 ${
+                            isActive ? "text-text-1" : "text-icon-2"
+                          }`}
+                        />
+                        <span>{tool.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Text - direct button */}
+            <button
+              onClick={() => {
+                setCurrentTool("text");
+                setShapesDropdownOpen(false);
+                setShapeOptionsDropdownOpen(false);
+                setSizeDropdownOpen(false);
+              }}
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-xl text-[11px] transition-colors ${
+                currentTool === "text" ? "bg-white/10 text-text-1" : "text-icon-2 hover:bg-white/5"
+              }`}
+              title="Text (T)"
+            >
+              <Type className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Separator */}
+            {(isShapeTool(currentTool) || currentTool === "text" || selectedIsShape || selectedIsText) && (
+              <div className="my-0.5 h-px w-full max-w-[32px] shrink-0 bg-border-transparent" aria-hidden />
+            )}
+
+            {/* Shape options: color, stroke, fill */}
+            {(isShapeTool(currentTool) || selectedIsShape) && (
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    setShapeOptionsDropdownOpen((o) => !o);
+                    setShapesDropdownOpen(false);
+                    setSizeDropdownOpen(false);
+                  }}
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-xl text-[11px] transition-colors ${
+                    shapeOptionsDropdownOpen ? "bg-white/10 text-text-1" : "text-icon-2 hover:bg-white/5"
+                  }`}
+                  title="Shape options"
+                >
+                  <Palette className="w-3.5 h-3.5" />
                 </button>
-                <button onClick={() => { setExportFormat("jpeg"); setExportDropdownOpen(false); }} className={`w-full px-3 py-1.5 text-left text-xs hover:bg-neutral-700 ${exportFormat === "jpeg" ? "text-white" : ""}`}>
-                  JPEG
-                </button>
-                {exportFormat === "jpeg" && (
-                  <div className="px-3 py-2 border-t border-neutral-600">
-                    <label className="text-[10px] text-neutral-500 block mb-1">Quality: {Math.round(exportQuality * 100)}%</label>
-                    <input type="range" min="0" max="100" value={exportQuality * 100} onChange={(e) => setExportQuality(Number(e.target.value) / 100)} className="w-full" />
+                {shapeOptionsDropdownOpen && (
+                  <div className="absolute left-full top-0 ml-2 z-[130] min-w-[190px] rounded-2xl border border-border-transparent-secondary bg-background-transparent-black p-3 shadow-xl f-effect-backdrop-blur-lg">
+                    <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-text-3">
+                      Color
+                    </div>
+                    <div className="mb-3 grid grid-cols-4 gap-2">
+                      {COLORS.map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => {
+                            setToolOptions({ strokeColor: color });
+                            if (selectedLayerId && selectedIsShape) {
+                              const s = selectedItem as AnnotationShape;
+                              const updates: Partial<AnnotationShape> = { stroke: color };
+                              if (
+                                (s.type === "rectangle" || s.type === "circle") &&
+                                (s as RectangleShape | CircleShape).fill
+                              ) {
+                                (updates as RectangleShape | CircleShape).fill = color;
+                              }
+                              updateAnnotation(selectedLayerId, updates);
+                            }
+                          }}
+                          className={`h-7 w-7 rounded-full transition-transform ${
+                            toolOptions.strokeColor === color
+                              ? "ring-2 ring-white ring-offset-2 ring-offset-black/40 scale-110"
+                              : "hover:scale-105"
+                          }`}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </div>
+
+                    <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-text-3">
+                      Stroke
+                    </div>
+                    <div className="mb-3 flex items-center gap-2">
+                      {STROKE_WIDTHS.map((width) => (
+                        <button
+                          key={width}
+                          onClick={() => {
+                            setToolOptions({ strokeWidth: width });
+                            if (selectedLayerId && selectedIsShape) {
+                              updateAnnotation(selectedLayerId, { strokeWidth: width });
+                            }
+                          }}
+                          className={`flex h-7 w-7 items-center justify-center rounded-md ${
+                            toolOptions.strokeWidth === width ? "bg-white/10" : "hover:bg-white/5"
+                          }`}
+                        >
+                          <div
+                            className="rounded-full bg-white"
+                            style={{ width: width * 1.3, height: width * 1.3 }}
+                          />
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-text-3">
+                      Fill
+                    </div>
+                    <button
+                      onClick={() => {
+                        const newFill = toolOptions.fillColor ? null : toolOptions.strokeColor;
+                        setToolOptions({ fillColor: newFill });
+                        if (selectedLayerId && selectedIsShape) {
+                          const s = selectedItem as AnnotationShape;
+                          if (s.type === "rectangle" || s.type === "circle") {
+                            updateAnnotation(selectedLayerId, { fill: newFill });
+                          }
+                        }
+                      }}
+                      className={`w-full rounded-xl px-3 py-1.5 text-left text-xs transition-colors ${
+                        toolOptions.fillColor ? "bg-white/10 text-text-1" : "text-text-2 hover:bg-white/5"
+                      }`}
+                    >
+                      {toolOptions.fillColor ? "Fill on" : "Fill off"}
+                    </button>
                   </div>
                 )}
               </div>
             )}
-          </div>
-          <button
-            onClick={() => {
-              const dataUrl = flattenImage();
-              const a = document.createElement("a");
-              a.href = dataUrl;
-              a.download = `annotation-${Date.now()}.${exportFormat}`;
-              a.click();
-            }}
-            className="px-3 py-1.5 text-xs font-medium text-neutral-400 hover:text-white"
-            title="Download"
-          >
-            Download
-          </button>
-          <button onClick={handleDone} className="px-4 py-1.5 text-xs font-medium bg-white text-neutral-900 rounded hover:bg-neutral-200">
-            Done
-          </button>
-          <button onClick={closeModal} className="px-4 py-1.5 text-xs font-medium text-neutral-400 hover:text-white">
-            Cancel
-          </button>
-        </div>
-      </div>
 
-      {/* Canvas + Layer Panel */}
-      <div className="flex-1 flex overflow-hidden relative">
-      {/* Floating Toolbar - FloatingActionBar style */}
-      <aside
-        ref={floatingDropdownRef}
-        className="absolute left-4 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center gap-2 rounded-full p-2 backdrop-blur-[16px] bg-neutral-900/90 border border-neutral-700"
-        data-id="annotation-floating-toolbar"
-      >
-        {/* Select - direct button */}
-        <button
-          onClick={() => { setCurrentTool("select"); setShapesDropdownOpen(false); setShapeOptionsDropdownOpen(false); setSizeDropdownOpen(false); }}
-          className={`inline-flex items-center justify-center h-10 w-10 shrink-0 rounded-lg transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 ${
-            currentTool === "select" ? "bg-white text-neutral-900" : "text-neutral-400 hover:bg-white/5 hover:text-neutral-200"
-          }`}
-          title="Select (V)"
-        >
-          <MousePointer2 className="w-5 h-5" />
-        </button>
-
-        {/* Shapes dropdown - Rect, Circle, Arrow, Draw only */}
-        <div className="relative">
-          <button
-            onClick={() => { setShapesDropdownOpen((o) => !o); setShapeOptionsDropdownOpen(false); setSizeDropdownOpen(false); }}
-            className={`inline-flex items-center justify-center h-10 w-10 shrink-0 rounded-lg transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 ${
-              ["rectangle", "circle", "arrow", "freehand"].includes(currentTool) ? "bg-white text-neutral-900" : "text-neutral-400 hover:bg-white/5 hover:text-neutral-200"
-            }`}
-            title="Shapes"
-          >
-            {currentTool === "rectangle" ? <Square className="w-5 h-5" /> : currentTool === "circle" ? <CircleIcon className="w-5 h-5" /> : currentTool === "arrow" ? <ArrowRight className="w-5 h-5" /> : currentTool === "freehand" ? <Pencil className="w-5 h-5" /> : <Square className="w-5 h-5" />}
-          </button>
-          {shapesDropdownOpen && (
-            <div className="absolute left-full top-0 ml-2 bg-[#252525] border border-neutral-600 rounded-lg shadow-xl py-1 min-w-[130px] z-[110]">
-              {shapeTools.map((tool) => {
-                const Icon = tool.type === "rectangle" ? Square : tool.type === "circle" ? CircleIcon : tool.type === "arrow" ? ArrowRight : Pencil;
-                const isActive = currentTool === tool.type;
-                return (
-                  <button
-                    key={tool.type}
-                    onClick={() => { setCurrentTool(tool.type); setShapesDropdownOpen(false); }}
-                    title={`${tool.label} (${tool.shortcut})`}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors rounded-md mx-1 ${
-                      isActive ? "bg-[#2d5a9e]/50 text-white" : "text-neutral-200 hover:bg-neutral-700/80 hover:text-white"
-                    }`}
-                  >
-                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : "text-neutral-400"}`} />
-                    {tool.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Text - direct button */}
-        <button
-          onClick={() => { setCurrentTool("text"); setShapesDropdownOpen(false); setShapeOptionsDropdownOpen(false); setSizeDropdownOpen(false); }}
-          className={`inline-flex items-center justify-center h-10 w-10 shrink-0 rounded-lg transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 ${
-            currentTool === "text" ? "bg-white text-neutral-900" : "text-neutral-400 hover:bg-white/5 hover:text-neutral-200"
-          }`}
-          title="Text (T)"
-        >
-          <Type className="w-5 h-5" />
-        </button>
-
-        {/* Horizontal separator - between tools and parameters */}
-        {(isShapeTool(currentTool) || currentTool === "text" || selectedIsShape || selectedIsText) && (
-          <div className="w-full max-w-[32px] h-px bg-neutral-600 shrink-0 my-0.5" aria-hidden />
-        )}
-
-        {/* Combined shape options - Color, Size, Fill - for shape tools or when shape selected */}
-        {(isShapeTool(currentTool) || selectedIsShape) && (
-          <div className="relative">
-            <button
-              onClick={() => { setShapeOptionsDropdownOpen((o) => !o); setShapesDropdownOpen(false); setSizeDropdownOpen(false); }}
-              className={`inline-flex items-center justify-center h-10 w-10 shrink-0 rounded-lg transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 ${
-                shapeOptionsDropdownOpen ? "bg-white text-neutral-900" : "text-neutral-400 hover:bg-white/5 hover:text-neutral-200"
-              }`}
-              title="Shape options"
-            >
-              <Palette className="w-5 h-5" />
-            </button>
-            {shapeOptionsDropdownOpen && (
-              <div className="absolute left-full top-0 ml-2 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl p-3 z-[110] min-w-[180px]">
-                <div className="text-[10px] text-neutral-500 uppercase tracking-wide mb-2">Color</div>
-                <div className="grid grid-cols-4 gap-2 mb-4">
-                  {COLORS.map((color) => (
-                    <button
-                      key={color}
-                      onClick={() => {
-                        setToolOptions({ strokeColor: color });
-                        if (selectedLayerId && selectedIsShape) {
-                          const s = selectedItem as AnnotationShape;
-                          const updates: Partial<AnnotationShape> = { stroke: color };
-                          if ((s.type === "rectangle" || s.type === "circle") && (s as RectangleShape | CircleShape).fill) {
-                            updates.fill = color;
-                          }
-                          updateAnnotation(selectedLayerId, updates);
-                        }
-                      }}
-                      className={`w-8 h-8 rounded-full transition-transform shrink-0 ${
-                        toolOptions.strokeColor === color ? "ring-2 ring-white ring-offset-2 ring-offset-neutral-800 scale-110" : "hover:scale-105"
-                      }`}
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                </div>
-                <div className="text-[10px] text-neutral-500 uppercase tracking-wide mb-2">Size</div>
-                <div className="flex items-center gap-2 mb-4">
-                  {STROKE_WIDTHS.map((width) => (
-                    <button
-                      key={width}
-                      onClick={() => {
-                        setToolOptions({ strokeWidth: width });
-                        if (selectedLayerId && selectedIsShape) updateAnnotation(selectedLayerId, { strokeWidth: width });
-                      }}
-                      className={`w-7 h-7 rounded flex items-center justify-center transition-colors ${
-                        toolOptions.strokeWidth === width ? "bg-neutral-600" : "hover:bg-neutral-700"
-                      }`}
-                    >
-                      <div className="bg-white rounded-full" style={{ width: width * 1.5, height: width * 1.5 }} />
-                    </button>
-                  ))}
-                </div>
-                <div className="text-[10px] text-neutral-500 uppercase tracking-wide mb-2">Fill</div>
+            {/* Text options: color, size, font */}
+            {(currentTool === "text" || selectedIsText) && (
+              <div className="relative">
                 <button
                   onClick={() => {
-                    const newFill = toolOptions.fillColor ? null : toolOptions.strokeColor;
-                    setToolOptions({ fillColor: newFill });
-                    if (selectedLayerId && selectedIsShape) {
-                      const s = selectedItem as AnnotationShape;
-                      if (s.type === "rectangle" || s.type === "circle") {
-                        updateAnnotation(selectedLayerId, { fill: newFill });
-                      }
-                    }
+                    setSizeDropdownOpen((o) => !o);
+                    setShapesDropdownOpen(false);
+                    setShapeOptionsDropdownOpen(false);
                   }}
-                  className={`w-full px-3 py-2 text-left text-xs rounded transition-colors ${
-                    toolOptions.fillColor ? "bg-neutral-600 text-white" : "text-neutral-300 hover:bg-neutral-700"
+                  className={`inline-flex h-8 w-8 items-center justify-center rounded-xl text-[11px] transition-colors ${
+                    sizeDropdownOpen ? "bg-white/10 text-text-1" : "text-icon-2 hover:bg-white/5"
                   }`}
+                  title="Text options"
                 >
-                  {toolOptions.fillColor ? "Fill on" : "Fill off"}
+                  <Minus className="w-3.5 h-3.5" />
                 </button>
-              </div>
-            )}
-          </div>
-        )}
+                {sizeDropdownOpen && (
+                  <div className="absolute left-full top-0 ml-2 z-[130] min-w-[190px] rounded-2xl border border-border-transparent-secondary bg-background-transparent-black p-3 shadow-xl f-effect-backdrop-blur-lg">
+                    <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-text-3">
+                      Color
+                    </div>
+                    <div className="mb-3 grid grid-cols-4 gap-2">
+                      {COLORS.map((color) => (
+                        <button
+                          key={color}
+                          onClick={() => {
+                            setToolOptions({ strokeColor: color });
+                            if (selectedLayerId && selectedIsText) {
+                              updateAnnotation(selectedLayerId, { fill: color });
+                            }
+                          }}
+                          className={`h-7 w-7 rounded-full transition-transform ${
+                            toolOptions.strokeColor === color
+                              ? "ring-2 ring-white ring-offset-2 ring-offset-black/40 scale-110"
+                              : "hover:scale-105"
+                          }`}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </div>
 
-        {/* Text options - for text tool or when text selected */}
-        {(currentTool === "text" || selectedIsText) && (
-          <div className="relative">
-            <button
-              onClick={() => { setSizeDropdownOpen((o) => !o); setShapesDropdownOpen(false); setShapeOptionsDropdownOpen(false); }}
-              className="inline-flex items-center justify-center h-10 w-10 shrink-0 rounded-lg text-neutral-400 transition-all duration-300 hover:bg-white/5 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-              title="Text options"
-            >
-              <Minus className="w-5 h-5" />
-            </button>
-            {sizeDropdownOpen && (
-              <div className="absolute left-full top-0 ml-2 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl p-3 z-[110] min-w-[160px]">
-                <div className="text-[10px] text-neutral-500 uppercase tracking-wide mb-2">Color</div>
-                <div className="grid grid-cols-4 gap-2 mb-4">
-                  {COLORS.map((color) => (
-                    <button
-                      key={color}
-                      onClick={() => {
-                        setToolOptions({ strokeColor: color });
-                        if (selectedLayerId && selectedIsText) updateAnnotation(selectedLayerId, { fill: color });
-                      }}
-                      className={`w-8 h-8 rounded-full transition-transform shrink-0 ${
-                        toolOptions.strokeColor === color ? "ring-2 ring-white ring-offset-2 ring-offset-neutral-800 scale-110" : "hover:scale-105"
-                      }`}
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                </div>
-                <div className="text-[10px] text-neutral-500 uppercase tracking-wide mb-1.5">Size (px)</div>
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {FONT_SIZES.map((px) => (
-                    <button
-                      key={px}
-                      onClick={() => {
-                        setToolOptions({ fontSize: px });
-                        if (selectedLayerId && selectedIsText) updateAnnotation(selectedLayerId, { fontSize: px });
-                      }}
-                      className={`px-2 py-1 text-xs rounded transition-colors ${
-                        toolOptions.fontSize === px ? "bg-neutral-600 text-white" : "text-neutral-300 hover:bg-neutral-700"
-                      }`}
-                    >
-                      {px}
-                    </button>
-                  ))}
-                </div>
-                <div className="text-[10px] text-neutral-500 uppercase tracking-wide mb-1.5">Font</div>
-                <select
-                  value={toolOptions.fontFamily}
-                  onChange={(e) => {
-                    const font = e.target.value;
-                    setToolOptions({ fontFamily: font });
-                    if (selectedLayerId && selectedIsText) updateAnnotation(selectedLayerId, { fontFamily: font });
-                  }}
-                  className="w-full px-2 py-1.5 text-xs bg-neutral-700 border border-neutral-600 rounded text-neutral-300"
-                >
-                  {FONT_FAMILIES.map((f) => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-        )}
-      </aside>
+                    <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-text-3">
+                      Size
+                    </div>
+                    <div className="mb-3 flex flex-wrap gap-1">
+                      {FONT_SIZES.map((px) => (
+                        <button
+                          key={px}
+                          onClick={() => {
+                            setToolOptions({ fontSize: px });
+                            if (selectedLayerId && selectedIsText) {
+                              updateAnnotation(selectedLayerId, { fontSize: px });
+                            }
+                          }}
+                          className={`rounded px-2 py-1 text-xs transition-colors ${
+                            toolOptions.fontSize === px
+                              ? "bg-white/10 text-text-1"
+                              : "text-text-2 hover:bg-white/5"
+                          }`}
+                        >
+                          {px}
+                        </button>
+                      ))}
+                    </div>
 
-      <div ref={containerRef} className="flex-1 overflow-hidden bg-neutral-900">
-        <Stage
-          ref={stageRef}
-          width={containerRef.current?.clientWidth || 800}
-          height={containerRef.current?.clientHeight || 600}
-          scaleX={scale}
-          scaleY={scale}
-          x={position.x}
-          y={position.y}
-          draggable={false}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          onWheel={handleWheel}
-        >
-          <Layer>
-            <Rect
-              x={0}
-              y={0}
-              width={stageSize.width}
-              height={stageSize.height}
-              fill="#1a1a1a"
-              listening={currentTool === "select"}
-              draggable={currentTool === "select"}
-              dragBoundFunc={() => ({ x: 0, y: 0 })}
-              onDragMove={(e) => {
-                const node = e.target;
-                setPosition((p) => ({ x: p.x + node.x(), y: p.y + node.y() }));
-                node.position({ x: 0, y: 0 });
-              }}
-              id="pan-background"
-            />
-            {unifiedLayers.filter(isLayerVisible).map((item) => {
-              if (isImageLayer(item)) {
-                const img = imageCache[item.url];
-                if (!img) return null;
-                const canEdit = currentTool === "select" && !isLayerLocked(item);
-                return (
-                  <Group
-                    key={item.id}
-                    id={item.id}
-                    x={item.x}
-                    y={item.y}
-                    scaleX={item.scaleX}
-                    scaleY={item.scaleY}
-                    globalCompositeOperation={item.blendMode ?? "source-over"}
-                    listening={canEdit}
-                    draggable={canEdit}
-                    dragBoundFunc={canEdit ? (pos: { x: number; y: number }) => ({ x: snapToGuides(pos.x, "x"), y: snapToGuides(pos.y, "y") }) : undefined}
-                    onDragEnd={(e) => {
-                      const node = e.target;
-                      const newX = snapToGuides(node.x(), "x");
-                      const newY = snapToGuides(node.y(), "y");
-                      updateImageLayer(item.id, { x: newX, y: newY });
-                    }}
-                    onClick={() => canEdit && selectLayer(item.id)}
-                    onTransformEnd={(e) => {
-                      const node = e.target;
-                      updateImageLayer(item.id, {
-                        x: node.x(),
-                        y: node.y(),
-                        scaleX: node.scaleX(),
-                        scaleY: node.scaleY(),
-                      });
-                    }}
-                  >
-                    <KonvaImage image={img} width={stageSize.width} height={stageSize.height} listening={canEdit} />
-                  </Group>
-                );
-              }
-              return renderShape(item);
-            })}
-            {currentShape && renderShape(currentShape, true)}
-            <Transformer ref={transformerRef} shouldOverdrawWholeArea={false} />
-          </Layer>
-        </Stage>
-      </div>
-
-      {/* Layer Panel - Photoshop style */}
-      {unifiedLayers.length > 0 && (
-        <div className="w-52 shrink-0 bg-[#1e1e1e] border-l border-[#2d2d2d] flex flex-col">
-          <div className="px-2 py-1.5 border-b border-[#2d2d2d] text-[10px] font-medium text-neutral-500 uppercase tracking-wider">
-            Layers
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {[...unifiedLayers].reverse().map((item, reversedIndex) => {
-              const index = unifiedLayers.length - 1 - reversedIndex;
-              const isSelected = selectedLayerId === item.id;
-              const visible = isLayerVisible(item);
-              const locked = isLayerLocked(item);
-              const defaultName = isImageLayer(item)
-                ? `Image ${index + 1}`
-                : item.type === "rectangle"
-                  ? "Rectangle"
-                  : item.type === "circle"
-                    ? "Ellipse"
-                    : item.type === "arrow"
-                      ? "Arrow"
-                      : item.type === "freehand"
-                        ? "Path"
-                        : item.type === "text"
-                          ? (item as TextShape).text || "Text"
-                          : "Layer";
-              const layerName = item.name ?? defaultName;
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => currentTool === "select" && !locked && selectLayer(item.id)}
-                  onContextMenu={(e) => handleLayerContextMenu(e, index)}
-                  className={`flex items-center gap-1.5 px-2 py-1.5 cursor-pointer border-b border-[#2d2d2d]/50 transition-colors min-h-[36px] ${
-                    isSelected ? "bg-[#2d5a9e]/40" : "hover:bg-[#2d2d2d]"
-                  } ${!visible ? "opacity-50" : ""}`}
-                >
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); toggleLayerVisibility(item.id); }}
-                    className="p-0.5 shrink-0 text-neutral-500 hover:text-neutral-300"
-                    title={visible ? "Hide layer" : "Show layer"}
-                  >
-                    {visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); toggleLayerLock(item.id); }}
-                    className="p-0.5 shrink-0 text-neutral-500 hover:text-neutral-300"
-                    title={locked ? "Unlock layer" : "Lock layer"}
-                  >
-                    {locked ? <Lock className="w-3 h-3" /> : <LockOpen className="w-3 h-3" />}
-                  </button>
-                  <div className="w-9 h-9 shrink-0 rounded overflow-hidden bg-[#2d2d2d] flex items-center justify-center">
-                    {isImageLayer(item) ? (
-                      <img src={item.url} alt="" className="w-full h-full object-cover block" />
-                    ) : (
-                      <>
-                        {item.type === "rectangle" && <div className="w-5 h-4 border border-white/60 rounded-sm" />}
-                        {item.type === "circle" && <div className="w-4 h-4 rounded-full border border-white/60" />}
-                        {item.type === "arrow" && <span className="text-white/70 text-sm">→</span>}
-                        {item.type === "freehand" && <span className="text-white/70 text-xs">✎</span>}
-                        {item.type === "text" && <span className="text-white/70 text-[10px] truncate max-w-full px-0.5">T</span>}
-                      </>
-                    )}
-                  </div>
-                  {editingLayerId === item.id ? (
-                    <input
-                      type="text"
-                      value={editingLayerName}
-                      onChange={(e) => setEditingLayerName(e.target.value)}
-                      onBlur={() => {
-                        if (editingLayerName.trim()) renameLayer(item.id, editingLayerName.trim());
-                        setEditingLayerId(null);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          if (editingLayerName.trim()) renameLayer(item.id, editingLayerName.trim());
-                          setEditingLayerId(null);
-                        }
-                        if (e.key === "Escape") setEditingLayerId(null);
-                      }}
-                      autoFocus
-                      className="flex-1 min-w-0 bg-transparent border-none outline-none text-[11px] text-neutral-300 px-0.5"
-                    />
-                  ) : (
-                    <span
-                      className="flex-1 text-[11px] text-neutral-300 truncate"
-                      onDoubleClick={(e) => {
-                        e.stopPropagation();
-                        if (!locked) {
-                          setEditingLayerId(item.id);
-                          setEditingLayerName(layerName);
-                        }
-                      }}
-                    >
-                      {layerName}
-                    </span>
-                  )}
-                  {isSelected && (
+                    <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-text-3">
+                      Font
+                    </div>
                     <select
-                      value={(item as { blendMode?: BlendMode }).blendMode ?? "source-over"}
+                      value={toolOptions.fontFamily}
                       onChange={(e) => {
-                        const mode = e.target.value as BlendMode;
-                        if (isImageLayer(item)) updateImageLayer(item.id, { blendMode: mode });
-                        else updateAnnotation(item.id, { blendMode: mode });
+                        const font = e.target.value;
+                        setToolOptions({ fontFamily: font });
+                        if (selectedLayerId && selectedIsText) {
+                          updateAnnotation(selectedLayerId, { fontFamily: font });
+                        }
                       }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="ml-1 text-[10px] bg-neutral-700 border border-neutral-600 rounded px-1 py-0.5 text-neutral-300 max-w-[72px] truncate"
-                      title="Blend mode"
+                      className="w-full rounded-xl border border-border-transparent bg-black/40 px-2 py-1.5 text-xs text-text-2"
                     >
-                      {BLEND_MODES.map((bm) => (
-                        <option key={bm.value} value={bm.value}>{bm.label}</option>
+                      {FONT_FAMILIES.map((f) => (
+                        <option key={f.value} value={f.value}>
+                          {f.label}
+                        </option>
                       ))}
                     </select>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                )}
+              </div>
+            )}
+      </aside>
+
+      {/* Centered canvas (no header, no card background) */}
+      <div className="relative flex items-center justify-center w-[1180px] h-[760px]">
+        <div ref={containerRef} className="flex items-center justify-center">
+          <div
+            className="relative alpha-checker-pattern rounded-2xl"
+            style={{ width: stageSize.width, height: stageSize.height }}
+          >
+            <div className="pointer-events-none absolute inset-0 rounded-2xl shadow-[0_0_0_2px_rgba(255,255,255,0.5)]" />
+            <Stage
+              ref={stageRef}
+              width={stageSize.width}
+              height={stageSize.height}
+              scaleX={scale}
+              scaleY={scale}
+              x={position.x}
+              y={position.y}
+              draggable={false}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onWheel={handleWheel}
+            >
+              <Layer>
+                <Rect
+                  x={0}
+                  y={0}
+                  width={stageSize.width}
+                  height={stageSize.height}
+                  fill="#1a1a1a"
+                  listening={currentTool === "select"}
+                  draggable={currentTool === "select"}
+                  dragBoundFunc={() => ({ x: 0, y: 0 })}
+                  onDragMove={(e) => {
+                    const node = e.target;
+                    setPosition((p) => ({ x: p.x + node.x(), y: p.y + node.y() }));
+                    node.position({ x: 0, y: 0 });
+                  }}
+                  id="pan-background"
+                />
+                {unifiedLayers.filter(isLayerVisible).map((item) => {
+                  if (isImageLayer(item)) {
+                    const img = imageCache[item.url];
+                    if (!img) return null;
+                    const canEdit = currentTool === "select" && !isLayerLocked(item);
+                    return (
+                      <Group
+                        key={item.id}
+                        id={item.id}
+                        x={item.x}
+                        y={item.y}
+                        scaleX={item.scaleX}
+                        scaleY={item.scaleY}
+                        globalCompositeOperation={item.blendMode ?? "source-over"}
+                        listening={canEdit}
+                        draggable={canEdit}
+                        dragBoundFunc={
+                          canEdit
+                            ? (pos: { x: number; y: number }) => ({
+                                x: snapToGuides(pos.x, "x"),
+                                y: snapToGuides(pos.y, "y"),
+                              })
+                            : undefined
+                        }
+                        onDragEnd={(e) => {
+                          const node = e.target;
+                          const newX = snapToGuides(node.x(), "x");
+                          const newY = snapToGuides(node.y(), "y");
+                          updateImageLayer(item.id, { x: newX, y: newY });
+                        }}
+                        onClick={() => canEdit && selectLayer(item.id)}
+                        onTransformEnd={(e) => {
+                          const node = e.target;
+                          updateImageLayer(item.id, {
+                            x: node.x(),
+                            y: node.y(),
+                            scaleX: node.scaleX(),
+                            scaleY: node.scaleY(),
+                          });
+                        }}
+                      >
+                        <KonvaImage image={img} width={stageSize.width} height={stageSize.height} listening={canEdit} />
+                      </Group>
+                    );
+                  }
+                  return renderShape(item);
+                })}
+                {currentShape && renderShape(currentShape, true)}
+                <Transformer ref={transformerRef} shouldOverdrawWholeArea={false} />
+              </Layer>
+            </Stage>
           </div>
         </div>
-      )}
+      </div>
 
       {layerContextMenu && (
         <div
@@ -1359,17 +1530,6 @@ export function AnnotationModal() {
           </button>
         </div>
       )}
-      </div>
-
-      {/* Bottom Options Bar */}
-      <div className="h-14 bg-neutral-900 flex items-center justify-center gap-6 px-4 border-t border-neutral-800">
-        {/* Zoom */}
-        <div className="flex items-center gap-2 ml-auto">
-          <button onClick={() => setScale(Math.max(scale - 0.1, 0.1))} className="w-7 h-7 rounded text-neutral-400 hover:text-white text-sm">-</button>
-          <span className="text-[10px] text-neutral-400 w-10 text-center">{Math.round(scale * 100)}%</span>
-          <button onClick={() => setScale(Math.min(scale + 0.1, 5))} className="w-7 h-7 rounded text-neutral-400 hover:text-white text-sm">+</button>
-        </div>
-      </div>
 
       {/* Inline Text Input */}
       {editingTextId && textInputPosition && (
@@ -1380,8 +1540,8 @@ export function AnnotationModal() {
           defaultValue={editingTextId === "new" ? "" : (unifiedLayers.find((a) => !isImageLayer(a) && a.id === editingTextId) as TextShape)?.text || ""}
           className="fixed z-[110] bg-transparent border-none outline-none"
           style={{
-            left: textInputPosition.x,
-            top: textInputPosition.y,
+            left: textInputPosition!.x,
+            top: textInputPosition!.y,
             fontSize: `${(editingTextId === "new" ? toolOptions.fontSize : (unifiedLayers.find((a) => !isImageLayer(a) && a.id === editingTextId) as TextShape)?.fontSize ?? toolOptions.fontSize) * scale}px`,
             fontFamily: editingTextId === "new" ? toolOptions.fontFamily : ((unifiedLayers.find((a) => !isImageLayer(a) && a.id === editingTextId) as TextShape)?.fontFamily ?? toolOptions.fontFamily),
             color: editingTextId === "new" ? toolOptions.strokeColor : ((unifiedLayers.find((a) => !isImageLayer(a) && a.id === editingTextId) as TextShape)?.fill || toolOptions.strokeColor),
@@ -1389,6 +1549,8 @@ export function AnnotationModal() {
             caretColor: "white",
           }}
           onKeyDown={(e) => {
+            if (!editingTextId) return;
+
             if (e.key === "Enter") {
               const value = (e.target as HTMLInputElement).value;
               if (value.trim()) {
@@ -1412,7 +1574,7 @@ export function AnnotationModal() {
                   updateAnnotation(editingTextId, { text: value });
                 }
               } else if (editingTextId !== "new") {
-                deleteLayer(editingTextId);
+                deleteLayer(editingTextId!);
               }
               setEditingTextId(null);
               setTextInputPosition(null);
@@ -1438,6 +1600,8 @@ export function AnnotationModal() {
               return;
             }
 
+            if (!editingTextId) return;
+
             const value = e.target.value;
             if (value.trim()) {
               if (editingTextId === "new" && pendingTextPosition) {
@@ -1457,10 +1621,10 @@ export function AnnotationModal() {
                 };
                 addAnnotation(newShape);
               } else {
-                updateAnnotation(editingTextId, { text: value });
+                updateAnnotation(editingTextId!, { text: value });
               }
             } else if (editingTextId !== "new") {
-              deleteLayer(editingTextId);
+              deleteLayer(editingTextId!);
             }
             setEditingTextId(null);
             setTextInputPosition(null);
