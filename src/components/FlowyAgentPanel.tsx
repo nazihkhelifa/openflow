@@ -99,6 +99,15 @@ export function FlowyAgentPanel({
     return { count: ids.length, types: unique.slice(0, 4) };
   }, [contextNodeIds, workflowState]);
 
+  const nodeTypeById = useMemo(() => {
+    const m = new Map<string, string>();
+    if (!workflowState) return m;
+    for (const n of workflowState.nodes) {
+      m.set(n.id, n.type);
+    }
+    return m;
+  }, [workflowState]);
+
   const nodePickerItems = useMemo(() => {
     if (!workflowState) return [];
     const q = nodePickerQuery.trim().toLowerCase();
@@ -207,20 +216,31 @@ export function FlowyAgentPanel({
     }
   }, []);
 
-  const describeOperation = useCallback((op: EditOperation): string => {
+  const describeOperation = useCallback(
+    (op: EditOperation): string => {
     switch (op.type) {
       case "addNode":
         return `Add ${op.nodeType}`;
       case "removeNode":
-        return `Remove node`;
+        return `Remove node (${op.nodeId})`;
       case "updateNode":
-        return `Update node`;
+        if (nodeTypeById.get(op.nodeId) === "prompt") {
+          const prompt = (op.data as any)?.prompt;
+          if (typeof prompt === "string") {
+            const cleaned = prompt.replace(/\s+/g, " ").trim();
+            const preview = cleaned.slice(0, 42);
+            return `Type prompt: "${preview}${cleaned.length > 42 ? "..." : ""}"`;
+          }
+        }
+        return `Update node (${op.nodeId})`;
       case "addEdge":
-        return `Connect nodes`;
+        return `Connect ${op.source} -> ${op.target}`;
       case "removeEdge":
-        return `Remove connection`;
+        return `Remove connection (${op.edgeId})`;
     }
-  }, []);
+    },
+    [nodeTypeById]
+  );
 
   const applyOperationAtIndex = useCallback(
     async (index: number) => {
@@ -237,6 +257,7 @@ export function FlowyAgentPanel({
             const center = getNodeCenterScreen(op.nodeId);
             if (center) setCursor({ x: center.x, y: center.y, visible: true });
           } else if (op.type === "addEdge") {
+            // Move cursor to the source first (then we'll move it to target after the edge is created).
             const center = getNodeCenterScreen(op.source);
             if (center) setCursor({ x: center.x, y: center.y, visible: true });
           }
@@ -253,18 +274,60 @@ export function FlowyAgentPanel({
             await sleep(150);
           }
         } else {
-          onApplyEdits([op]);
-          await sleep(50);
+          if (op.type === "updateNode" && nodeTypeById.get(op.nodeId) === "prompt") {
+            const fullPrompt = (op.data as any)?.prompt;
+            if (typeof fullPrompt === "string" && fullPrompt.trim().length > 0) {
+              const baseData = { ...(op.data as any) };
+              const total = fullPrompt.length;
+              const steps = Math.max(8, Math.min(28, Math.ceil(total / 45)));
+              const stepSize = Math.max(4, Math.ceil(total / steps));
 
-          const targetNodeId =
-            op.type === "removeNode" || op.type === "updateNode" ? op.nodeId : undefined;
+              // Apply an initial empty prompt quickly so React Flow renders the "cursor typing" target.
+              const initialOp: any = {
+                ...op,
+                data: { ...baseData, prompt: "" },
+                __flowyTypingStart: true,
+              };
+              onApplyEdits([initialOp]);
+              await sleep(25);
+
+              for (let i = stepSize; i < total + 1; i += stepSize) {
+                const partial = fullPrompt.slice(0, Math.min(i, total));
+                const chunkOp: any = {
+                  ...op,
+                  data: { ...baseData, prompt: partial },
+                  __flowyTypingChunk: true,
+                };
+                onApplyEdits([chunkOp]);
+                await sleep(18);
+              }
+
+              // Ensure the final prompt is exactly correct.
+              const finalOp: any = {
+                ...op,
+                data: { ...baseData, prompt: fullPrompt },
+                __flowyTypingChunk: true,
+              };
+              onApplyEdits([finalOp]);
+              await sleep(30);
+            } else {
+              // No prompt text to animate; apply directly.
+              onApplyEdits([op]);
+              await sleep(50);
+            }
+          } else {
+            onApplyEdits([op]);
+            await sleep(50);
+          }
+
+          const targetNodeId = op.type === "removeNode" || op.type === "updateNode" ? op.nodeId : undefined;
           if (targetNodeId) {
             const center = getNodeCenterScreen(targetNodeId);
             if (center) setCursor({ x: center.x, y: center.y, visible: true });
-            await sleep(120);
+            await sleep(60);
           } else if (op.type === "addEdge") {
-            const s = getNodeCenterScreen(op.source);
-            if (s) setCursor({ x: s.x, y: s.y, visible: true });
+            const t = getNodeCenterScreen(op.target);
+            if (t) setCursor({ x: t.x, y: t.y, visible: true });
             await sleep(80);
           }
         }
@@ -274,7 +337,7 @@ export function FlowyAgentPanel({
         setIsExecutingStep(false);
       }
     },
-    [getNodeCenterScreen, onApplyEdits, pendingOperations, sleep]
+    [getNodeCenterScreen, nodeTypeById, onApplyEdits, pendingOperations, sleep]
   );
 
   const handleApproveStep = useCallback(async () => {

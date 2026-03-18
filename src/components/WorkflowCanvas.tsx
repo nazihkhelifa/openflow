@@ -962,9 +962,22 @@ export function WorkflowCanvas() {
 
   // Handle applying edit operations from chat
   const handleApplyEdits = useCallback((operations: EditOperation[]) => {
-    captureSnapshot(); // Snapshot before AI edits
+    // During prompt "typing" animation we may apply many small updateNode operations.
+    // Tag those operations so we don't spam snapshots/toasts and keep UI smooth.
+    const typedChunk =
+      operations?.some((op) => (op as any)?.__flowyTypingChunk === true) ||
+      operations?.some((op) => (op as any)?.__flowyTyping === true) ||
+      operations?.some((op) => (op as any)?.__flowyTypingStart === true);
+
+    const shouldCaptureSnapshot =
+      !typedChunk ||
+      operations?.some((op) => (op as any)?.__flowyTypingStart === true);
+
+    if (shouldCaptureSnapshot) {
+      captureSnapshot(); // Snapshot before AI edits (once per step)
+    }
     const result = applyEditOperations(operations);
-    if (result.applied > 0) {
+    if (!typedChunk && result.applied > 0) {
       showToast(`Applied ${result.applied} edit(s)`, "success");
     }
     if (result.skipped.length > 0) {
