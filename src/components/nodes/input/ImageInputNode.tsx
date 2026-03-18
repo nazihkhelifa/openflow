@@ -6,8 +6,9 @@ import { BaseNode } from "../shared/BaseNode";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { ImageInputNodeData } from "@/types";
 import { calculateNodeSizeForFullBleed, SQUARE_SIZE } from "@/utils/nodeDimensions";
-import { MediaExpandButton } from "../shared/MediaExpandButton";
 import { UploadToolbar } from "./UploadToolbar";
+import { useMediaViewer } from "@/providers/media-viewer";
+import { collectMediaItems } from "@/lib/media-collector";
 
 type ImageInputNodeType = Node<ImageInputNodeData, "imageInput">;
 
@@ -16,6 +17,8 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { getNode, updateNode } = useReactFlow();
+  const getNodes = useReactFlow().getNodes;
+  const { openViewer } = useMediaViewer();
 
   // Resize node to match uploaded image aspect ratio (like arty upload node)
   useEffect(() => {
@@ -135,6 +138,13 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
     }
   }, [nodeData.image, nodeData.filename]);
 
+  const handleFullscreen = useCallback(() => {
+    if (!nodeData.image) return;
+    const items = collectMediaItems(getNodes());
+    const index = items.findIndex((item) => item.url === nodeData.image && item.nodeId === id);
+    openViewer(items, index >= 0 ? index : 0);
+  }, [getNodes, id, nodeData.image, openViewer]);
+
   return (
     <>
       <UploadToolbar
@@ -142,8 +152,7 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
         hasImage={!!nodeData.image}
         onReplaceClick={() => fileInputRef.current?.click()}
         onDownloadClick={handleDownload}
-        // Fullscreen is already available via the expand button in the node;
-        // we keep this reserved for a future dedicated handler.
+        onFullscreenClick={handleFullscreen}
       />
       <BaseNode
       id={id}
@@ -176,7 +185,6 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
             className="w-full h-full object-cover"
           />
           <div className="absolute top-2 right-2 flex gap-1">
-            <MediaExpandButton nodeId={id} mediaUrl={nodeData.image} />
             <button
               onClick={handleRemove}
               aria-label="Remove image"

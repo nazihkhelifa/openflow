@@ -9,9 +9,10 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { useToast } from "@/components/Toast";
 import { useAudioVisualization } from "@/hooks/useAudioVisualization";
 import { useAudioPlayback } from "@/hooks/useAudioPlayback";
+import { useMediaViewer } from "@/providers/media-viewer";
+import { collectMediaItems } from "@/lib/media-collector";
 import { MediaInputNodeData, type MediaInputMode } from "@/types";
 import { calculateNodeSizeForFullBleed, getVideoDimensions, SQUARE_SIZE } from "@/utils/nodeDimensions";
-import { MediaExpandButton } from "../shared/MediaExpandButton";
 import { NodeVideoPlayer } from "../shared/NodeVideoPlayer";
 import { UploadToolbar } from "./UploadToolbar";
 import * as THREE from "three";
@@ -126,6 +127,8 @@ export function MediaInputNode({ id, data, selected }: NodeProps<MediaInputNodeT
   const glbInputRef = useRef<HTMLInputElement>(null);
   const unifiedInputRef = useRef<HTMLInputElement>(null);
   const { getNode, updateNode } = useReactFlow();
+  const getNodes = useReactFlow().getNodes;
+  const { openViewer } = useMediaViewer();
   const [autoRotate, setAutoRotate] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
   const glbCaptureRef = useRef<(() => string | null) | null>(null);
@@ -422,6 +425,14 @@ export function MediaInputNode({ id, data, selected }: NodeProps<MediaInputNodeT
     else if (mode === "3d") glbInputRef.current?.click();
   }, [mode]);
 
+  const handleFullscreen = useCallback(() => {
+    const url = mode === "image" ? nodeData.image : mode === "video" ? nodeData.videoFile : null;
+    if (!url) return;
+    const items = collectMediaItems(getNodes());
+    const index = items.findIndex((item) => item.url === url && item.nodeId === id);
+    openViewer(items, index >= 0 ? index : 0);
+  }, [getNodes, id, mode, nodeData.image, nodeData.videoFile, openViewer]);
+
   const hasContent = !!(nodeData.image || nodeData.audioFile || nodeData.videoFile || nodeData.glbUrl);
   const getOutputHandle = () => {
     if (mode === "image") return { id: "image", type: "image" as const };
@@ -439,6 +450,7 @@ export function MediaInputNode({ id, data, selected }: NodeProps<MediaInputNodeT
           hasImage={mode === "image" ? !!nodeData.image : !!nodeData.videoFile}
           onReplaceClick={handleReplace}
           onDownloadClick={undefined}
+          onFullscreenClick={handleFullscreen}
           mode={mode === "video" ? "video" : "image"}
         />
       )}
@@ -450,16 +462,6 @@ export function MediaInputNode({ id, data, selected }: NodeProps<MediaInputNodeT
       aspectFitMedia={aspectFitMedia}
       minWidth={250}
       minHeight={mode === "3d" ? 200 : mode === "video" ? 200 : 150}
-      footerLeft={
-        hasContent ? (
-          <button
-            onClick={handleReplace}
-            className="px-2 py-1 text-xs font-medium text-neutral-300 hover:text-white bg-neutral-700/80 hover:bg-neutral-600 rounded transition-colors nodrag nopan"
-          >
-            Replace
-          </button>
-        ) : undefined
-      }
     >
       <input
         ref={imageInputRef}
@@ -534,9 +536,6 @@ export function MediaInputNode({ id, data, selected }: NodeProps<MediaInputNodeT
                 alt={nodeData.filename || "Uploaded image"}
                 className="w-full h-full object-cover"
               />
-              <div className="absolute top-2 right-2 flex gap-1">
-                <MediaExpandButton nodeId={id} mediaUrl={nodeData.image} />
-              </div>
             </div>
           ) : null}
         </>
@@ -555,11 +554,6 @@ export function MediaInputNode({ id, data, selected }: NodeProps<MediaInputNodeT
                 muted={true}
                 objectFit="cover"
                 compact
-                actions={
-                  <div className="flex gap-1">
-                    <MediaExpandButton nodeId={id} mediaUrl={nodeData.videoFile} />
-                  </div>
-                }
               />
             </div>
           ) : null}
