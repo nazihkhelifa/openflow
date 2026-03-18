@@ -93,13 +93,15 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
   const showControls = isHovered || selected;
 
   // Drag-to-move: allow repositioning nodes by dragging the header
-  const { setNodes, getNodes, getViewport } = useReactFlow();
+  const { getViewport } = useReactFlow();
+  const onNodesChange = useWorkflowStore((s) => s.onNodesChange);
   const isDraggingRef = useRef(false);
 
   const handleHeaderPointerDown = useCallback((e: React.PointerEvent) => {
     // Don't drag from interactive elements
     if ((e.target as HTMLElement).closest('.nodrag, button, input, textarea, a')) return;
     if (e.button !== 0) return;
+    if (isInLockedGroup) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -107,24 +109,30 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
     const startX = e.clientX;
     const startY = e.clientY;
 
-    const allNodes = getNodes();
-    const targetNode = allNodes.find(n => n.id === id);
+    const store = useWorkflowStore.getState();
+    const allNodes = store.nodes;
+    const targetNode = allNodes.find((n) => n.id === id);
     if (!targetNode) return;
 
     // Select this node if not already selected
     if (!targetNode.selected) {
-      setNodes(nodes => nodes.map(n => ({
-        ...n,
-        selected: n.id === id,
-      })));
+      onNodesChange(
+        allNodes.map((n) => ({
+          type: "select" as const,
+          id: n.id,
+          selected: n.id === id,
+        })),
+      );
     }
 
     // Capture starting positions of all nodes that will move
     const movingIds = targetNode.selected
-      ? new Set(allNodes.filter(n => n.selected).map(n => n.id))
+      ? new Set(allNodes.filter((n) => n.selected).map((n) => n.id))
       : new Set([id]);
     const startPositions = new Map(
-      allNodes.filter(n => movingIds.has(n.id)).map(n => [n.id, { x: n.position.x, y: n.position.y }])
+      allNodes
+        .filter((n) => movingIds.has(n.id))
+        .map((n) => [n.id, { x: n.position.x, y: n.position.y }]),
     );
 
     isDraggingRef.current = false;
@@ -141,14 +149,13 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
         const { zoom } = getViewport();
         const dx = screenDx / zoom;
         const dy = screenDy / zoom;
-        setNodes(nodes => nodes.map(n => {
-          const startPos = startPositions.get(n.id);
-          if (!startPos) return n;
-          return {
-            ...n,
+        onNodesChange(
+          Array.from(startPositions.entries()).map(([nodeId, startPos]) => ({
+            type: "position" as const,
+            id: nodeId,
             position: { x: startPos.x + dx, y: startPos.y + dy },
-          };
-        }));
+          })),
+        );
       }
     };
 
@@ -161,7 +168,6 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
 
       // Check group membership for ALL moved nodes
       if (wasDragging) {
-        const store = useWorkflowStore.getState();
         const { zoom } = getViewport();
         const dx = (e.clientX - startX) / zoom;
         const dy = (e.clientY - startY) / zoom;
@@ -208,7 +214,7 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
 
     document.addEventListener('pointermove', handlePointerMove);
     document.addEventListener('pointerup', handlePointerUp);
-  }, [id, getNodes, getViewport, setNodes]);
+  }, [id, getViewport, isInLockedGroup, onNodesChange]);
 
   return (
     <div

@@ -60,7 +60,7 @@ interface GroupControlsProps {
 
 // Renders the group header and resize handles - displayed above nodes (z-index 5)
 function GroupControls({ groupId, zoom }: GroupControlsProps) {
-  const { groups, updateGroup, deleteGroup, moveGroupNodes, toggleGroupLock } = useWorkflowStore();
+  const { groups, updateGroup, deleteGroup, moveGroupNodes, toggleGroupLock, clampNodesToGroup } = useWorkflowStore();
   const group = groups[groupId];
 
   const [isEditing, setIsEditing] = useState(false);
@@ -252,6 +252,7 @@ function GroupControls({ groupId, zoom }: GroupControlsProps) {
       setIsResizing(false);
       setResizeHandle(null);
       resizeStartRef.current = null;
+      clampNodesToGroup(groupId);
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -261,7 +262,7 @@ function GroupControls({ groupId, zoom }: GroupControlsProps) {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isResizing, resizeHandle, groupId, updateGroup, zoom]);
+  }, [isResizing, resizeHandle, groupId, updateGroup, zoom, clampNodesToGroup]);
 
   if (!group) return null;
 
@@ -326,20 +327,27 @@ function GroupControls({ groupId, zoom }: GroupControlsProps) {
 
       {/* Floating controls - top-right, scales naturally with canvas zoom */}
       <div
-        className="absolute right-0 pointer-events-auto"
+        className="absolute left-1/2 -translate-x-1/2 pointer-events-auto"
         style={{
           top: -28,
         }}
       >
-        <div className="flex items-center gap-1 px-1.5 py-0.5">
+        <div
+          className="flex items-center gap-1 rounded-xl border border-neutral-600 bg-neutral-800/95 px-2 py-1 shadow-lg backdrop-blur-sm text-[11px]"
+        >
           {/* Color Picker */}
           <div className="relative flex items-center" ref={colorPickerRef}>
             <button
               onClick={() => setShowColorPicker(!showColorPicker)}
-              className="w-4 h-4 rounded border border-white/30 hover:border-white/60 transition-colors"
-              style={{ backgroundColor: bgColor }}
+              className="h-7 w-7 shrink-0 flex items-center justify-center rounded-lg p-1.5 text-neutral-300 hover:bg-white/5"
               title="Change color"
-            />
+              aria-label="Change color"
+            >
+              <div
+                className="w-4 h-4 rounded border border-white/20"
+                style={{ backgroundColor: bgColor }}
+              />
+            </button>
             {showColorPicker && (
               <>
                 {/* Invisible backdrop to catch clicks outside */}
@@ -403,11 +411,14 @@ function GroupControls({ groupId, zoom }: GroupControlsProps) {
             )}
           </div>
 
+          <div className="mx-1 h-4 w-px bg-neutral-600" />
+
           {/* Lock/Unlock Button */}
           <button
             onClick={handleToggleLock}
-            className="p-0.5 rounded hover:bg-white/20 text-white/70 hover:text-white transition-colors"
+            className="h-7 w-7 shrink-0 flex items-center justify-center rounded-lg p-1.5 text-neutral-300 hover:bg-white/5"
             title={group.locked ? "Unlock group" : "Lock group"}
+            aria-label={group.locked ? "Unlock group" : "Lock group"}
           >
             {group.locked ? (
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -423,8 +434,9 @@ function GroupControls({ groupId, zoom }: GroupControlsProps) {
           {/* Delete Button */}
           <button
             onClick={handleDelete}
-            className="p-0.5 rounded hover:bg-white/20 text-white/70 hover:text-white transition-colors"
+            className="h-7 w-7 shrink-0 flex items-center justify-center rounded-lg p-1.5 text-neutral-300 hover:bg-white/5"
             title="Delete group"
+            aria-label="Delete group"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

@@ -192,6 +192,7 @@ interface WorkflowStore {
   toggleGroupLock: (groupId: string) => void;
   moveGroupNodes: (groupId: string, delta: { x: number; y: number }) => void;
   setNodeGroupId: (nodeId: string, groupId: string | undefined) => void;
+  clampNodesToGroup: (groupId: string) => void;
 
   // UI State
   openModalCount: number;
@@ -915,6 +916,41 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       ) as WorkflowNode[],
       hasUnsavedChanges: true,
     }));
+  },
+
+  clampNodesToGroup: (groupId: string) => {
+    const { groups } = get();
+    const group = groups[groupId];
+    if (!group) return;
+
+    // Keep a small inset so nodes don't sit on the border
+    const padding = 20;
+
+    set((state) => {
+      let changed = false;
+      const nextNodes = state.nodes.map((node) => {
+        if (node.groupId !== groupId) return node;
+        if (group.locked) return node;
+
+        const defaults = defaultNodeDimensions[node.type as NodeType] || { width: 300, height: 280 };
+        const width = node.measured?.width || (node.style?.width as number) || defaults.width;
+        const height = node.measured?.height || (node.style?.height as number) || defaults.height;
+
+        const minX = group.position.x + padding;
+        const minY = group.position.y + padding;
+        const maxX = group.position.x + group.size.width - padding - width;
+        const maxY = group.position.y + group.size.height - padding - height;
+
+        const clampedX = Math.min(Math.max(node.position.x, minX), maxX);
+        const clampedY = Math.min(Math.max(node.position.y, minY), maxY);
+
+        if (clampedX === node.position.x && clampedY === node.position.y) return node;
+        changed = true;
+        return { ...node, position: { x: clampedX, y: clampedY } };
+      }) as WorkflowNode[];
+
+      return changed ? { nodes: nextNodes, hasUnsavedChanges: true } : {};
+    });
   },
 
   getNodeById: (id: string) => {

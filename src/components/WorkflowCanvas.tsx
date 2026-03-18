@@ -261,6 +261,7 @@ export function WorkflowCanvas() {
   const getNodeById = useWorkflowStore((state) => state.getNodeById);
   const addToGlobalHistory = useWorkflowStore((state) => state.addToGlobalHistory);
   const setNodeGroupId = useWorkflowStore((state) => state.setNodeGroupId);
+  const clampNodesToGroup = useWorkflowStore((state) => state.clampNodesToGroup);
   const executeWorkflow = useWorkflowStore((state) => state.executeWorkflow);
   const setNavigationTarget = useWorkflowStore((state) => state.setNavigationTarget);
   const captureSnapshot = useWorkflowStore((state) => state.captureSnapshot);
@@ -396,35 +397,41 @@ export function WorkflowCanvas() {
       // Skip if it's a group node
       if (node.id.startsWith("group-")) return;
 
+      // If multiple nodes are selected, group-membership checks need to run for all moved nodes,
+      // not just the one React Flow reports as the drag target.
+      const movedNodes = node.selected ? nodes.filter((n) => n.selected) : [node];
+
       const defaults = defaultNodeDimensions[node.type as NodeType] || { width: 300, height: 280 };
-      const nodeWidth = node.measured?.width || (node.style?.width as number) || defaults.width;
-      const nodeHeight = node.measured?.height || (node.style?.height as number) || defaults.height;
-      const nodeCenterX = node.position.x + nodeWidth / 2;
-      const nodeCenterY = node.position.y + nodeHeight / 2;
+      const groupsToClamp = new Set<string>();
+      movedNodes.forEach((moved) => {
+        const movedDefaults = defaultNodeDimensions[moved.type as NodeType] || defaults;
+        const nodeWidth = moved.measured?.width || (moved.style?.width as number) || movedDefaults.width;
+        const nodeHeight = moved.measured?.height || (moved.style?.height as number) || movedDefaults.height;
+        const nodeCenterX = moved.position.x + nodeWidth / 2;
+        const nodeCenterY = moved.position.y + nodeHeight / 2;
 
-      // Check if node center is inside any group
-      let targetGroupId: string | undefined;
-
-      for (const group of Object.values(groups)) {
-        const inBoundsX = nodeCenterX >= group.position.x && nodeCenterX <= group.position.x + group.size.width;
-        const inBoundsY = nodeCenterY >= group.position.y && nodeCenterY <= group.position.y + group.size.height;
-
-        if (inBoundsX && inBoundsY) {
-          targetGroupId = group.id;
-          break;
+        // Check if node center is inside any group
+        let targetGroupId: string | undefined;
+        for (const group of Object.values(groups)) {
+          const inBoundsX = nodeCenterX >= group.position.x && nodeCenterX <= group.position.x + group.size.width;
+          const inBoundsY = nodeCenterY >= group.position.y && nodeCenterY <= group.position.y + group.size.height;
+          if (inBoundsX && inBoundsY) {
+            targetGroupId = group.id;
+            break;
+          }
         }
-      }
 
-      // Get current groupId of the node
-      const currentNode = nodes.find((n) => n.id === node.id);
-      const currentGroupId = currentNode?.groupId;
+        const currentGroupId = nodes.find((n) => n.id === moved.id)?.groupId;
+        if (targetGroupId !== currentGroupId) {
+          setNodeGroupId(moved.id, targetGroupId);
+        }
+        if (targetGroupId) groupsToClamp.add(targetGroupId);
+      });
 
-      // Update groupId if it changed
-      if (targetGroupId !== currentGroupId) {
-        setNodeGroupId(node.id, targetGroupId);
-      }
+      // Ensure nodes remain inside group after drop
+      groupsToClamp.forEach((gid) => clampNodesToGroup(gid));
     },
-    [groups, nodes, setNodeGroupId]
+    [groups, nodes, setNodeGroupId, clampNodesToGroup]
   );
 
   // Connection validation - checks if a connection is valid based on handle types and node types
