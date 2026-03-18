@@ -13,6 +13,11 @@ export type EditOperation =
       nodeType: NodeType;
       position?: { x: number; y: number };
       data?: Record<string, unknown>;
+      /**
+       * Optional deterministic node ID.
+       * When supplied, the apply step will use it instead of generating one.
+       */
+      nodeId?: string;
     }
   | { type: "removeNode"; nodeId: string }
   | { type: "updateNode"; nodeId: string; data: Record<string, unknown> }
@@ -56,8 +61,15 @@ export function applyEditOperations(
   for (const [index, operation] of operations.entries()) {
     switch (operation.type) {
       case "addNode": {
-        // Generate unique ID with timestamp and index
-        const nodeId = `${operation.nodeType}-ai-${Date.now()}-${index}`;
+        // Use caller-provided ID when available (agent planning), otherwise generate one.
+        const nodeId =
+          operation.nodeId ?? `${operation.nodeType}-ai-${Date.now()}-${index}`;
+
+        // Avoid duplicate IDs when caller supplies deterministic IDs.
+        if (nodes.some((n) => n.id === nodeId)) {
+          skipped.push(`addNode: node "${nodeId}" already exists`);
+          break;
+        }
 
         // Get default position and data
         const position = operation.position ?? { x: 200, y: 200 };

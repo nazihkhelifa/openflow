@@ -50,3 +50,7 @@ logs/*.json
 .agents/
 
 .superset/
+
+# backend (Python agent)
+/backend/.venv/
+/backend/__pycache__/
