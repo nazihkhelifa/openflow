@@ -264,6 +264,19 @@ export function WorkflowCanvas() {
   const setNodeGroupId = useWorkflowStore((state) => state.setNodeGroupId);
   const clampNodesToGroup = useWorkflowStore((state) => state.clampNodesToGroup);
   const executeWorkflow = useWorkflowStore((state) => state.executeWorkflow);
+  const handleFlowyRunNodeIds = useCallback(
+    async (nodeIds: string[]) => {
+      if (!nodeIds || nodeIds.length === 0) return;
+      for (const nodeId of nodeIds) {
+        try {
+          await executeWorkflow(nodeId);
+        } catch (e) {
+          console.error("Flowy run failed for node:", nodeId, e);
+        }
+      }
+    },
+    [executeWorkflow]
+  );
   const setNavigationTarget = useWorkflowStore((state) => state.setNavigationTarget);
   const captureSnapshot = useWorkflowStore((state) => state.captureSnapshot);
   const applyEditOperations = useWorkflowStore((state) => state.applyEditOperations);
@@ -1973,6 +1986,7 @@ export function WorkflowCanvas() {
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
         onApplyEdits={handleApplyEdits}
+        onRunNodeIds={handleFlowyRunNodeIds}
         workflowState={chatWorkflowState}
         selectedNodeIds={selectedNodeIds}
       />

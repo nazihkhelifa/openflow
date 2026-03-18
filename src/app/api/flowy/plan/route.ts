@@ -15,9 +15,11 @@ type PlanRequest = {
 function runFlowyPlanner(payload: PlanRequest): Promise<any> {
   const repoRoot = process.cwd();
   const pythonPath = path.join(repoRoot, "backend", ".venv", "Scripts", "python.exe");
-  const scriptPath = path.join(repoRoot, "backend", "flowy_agent_cli.py");
+  const deepScriptPath = path.join(repoRoot, "backend", "flowy_deepagents", "content_writer.py");
 
   return new Promise((resolve, reject) => {
+    const scriptPath = deepScriptPath;
+
     const child = spawn(pythonPath, [scriptPath], {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
@@ -36,19 +38,23 @@ function runFlowyPlanner(payload: PlanRequest): Promise<any> {
     child.on("error", (err) => reject(err));
 
     child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(`Flowy planner exited with code ${code}: ${stderr}`));
-        return;
-      }
       try {
-        resolve(JSON.parse(stdout));
+        const parsed = JSON.parse(stdout);
+        // If the python process returned a non-zero code but still printed JSON,
+        // prefer the JSON payload so the UI can show a structured error.
+        if (code !== 0) {
+          resolve(parsed);
+          return;
+        }
+        resolve(parsed);
       } catch (e) {
+        if (code !== 0) {
+          reject(new Error(`Flowy planner exited with code ${code}: ${stderr || stdout}`));
+          return;
+        }
         reject(
           new Error(
-            `Flowy planner returned non-JSON stdout. stdout=${stdout.slice(0, 500)} stderr=${stderr.slice(
-              0,
-              500
-            )}`
+            `Flowy planner returned non-JSON stdout. stdout=${stdout.slice(0, 500)} stderr=${stderr.slice(0, 500)}`
           )
         );
       }
@@ -68,7 +74,7 @@ export async function POST(request: Request) {
     }
 
     const result = await runFlowyPlanner(body);
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json(result);
   } catch (err) {
     console.error("[Flowy plan] error:", err);
     return NextResponse.json(

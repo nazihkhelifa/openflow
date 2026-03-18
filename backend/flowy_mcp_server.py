@@ -162,7 +162,33 @@ def _heuristic_plan_edits(
                 continue
 
         if wants_new_image_source:
-            prompt_target_id = (image_to_prompt_prompt_ids[0] if image_to_prompt_prompt_ids else None)
+            # Determine which prompt should receive the new "genre/reference" image.
+            # Sources:
+            # 1) prompts selected directly
+            # 2) prompts that receive image directly from selected nodes
+            # 3) prompts that drive selected generation nodes via prompt.text -> generate.text
+            selected_prompt_ids = [
+                nid
+                for nid in selected_node_ids
+                if nodes_by_id.get(nid, {}).get("type") == "prompt" and nodes_by_id.get(nid, {}).get("id")
+            ]
+
+            prompt_driving_selected_generates: List[str] = []
+            for e in edges:
+                try:
+                    if (
+                        e.get("target") in selected_set
+                        and e.get("targetHandle") == "text"
+                        and nodes_by_id.get(e.get("source"), {}).get("type") == "prompt"
+                    ):
+                        prompt_driving_selected_generates.append(e.get("source"))
+                except Exception:
+                    continue
+
+            prompt_target_candidates = list(
+                dict.fromkeys([*selected_prompt_ids, *image_to_prompt_prompt_ids, *prompt_driving_selected_generates])
+            )
+            prompt_target_id = prompt_target_candidates[0] if prompt_target_candidates else None
 
             prompt_id = prompt_target_id or "flowy-prompt-1"
             genre_image_id = "flowy-genre-imageInput-1"
@@ -237,16 +263,29 @@ def _heuristic_plan_edits(
             )
             add_edge_local(genre_image_id, prompt_id, "image", "image")
 
-            # If there is any generate node in the workflow, connect prompt.text -> it (and images -> it).
+            # Connect prompt.text -> a generation node.
+            # Prefer generation nodes the user selected.
             generate_image_types = {"generateImage", "generateVideo", "generate3d"}
-            generate_text_nodes = [
+            selected_gen_nodes = [
                 nid
-                for nid, n in nodes_by_id.items()
-                if n.get("type") in ({"generateImage", "generateVideo", "generate3d", "generateAudio"})
+                for nid in selected_node_ids
+                if nodes_by_id.get(nid, {}).get("type")
+                in {"generateImage", "generateVideo", "generate3d", "generateAudio"}
             ]
-            if generate_text_nodes:
-                gen_id = generate_text_nodes[0]
+
+            if selected_gen_nodes:
+                gen_id = selected_gen_nodes[0]
                 gen_type = nodes_by_id.get(gen_id, {}).get("type")
+            else:
+                generate_text_nodes = [
+                    nid
+                    for nid, n in nodes_by_id.items()
+                    if n.get("type") in ({"generateImage", "generateVideo", "generate3d", "generateAudio"})
+                ]
+                gen_id = generate_text_nodes[0] if generate_text_nodes else None
+                gen_type = nodes_by_id.get(gen_id, {}).get("type") if gen_id else None
+
+            if gen_id and gen_type:
 
                 add_edge_local(prompt_id, gen_id, "text", "text")
                 if gen_type in generate_image_types:

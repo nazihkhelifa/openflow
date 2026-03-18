@@ -24,6 +24,8 @@ type FlowyPlanResponse = {
   operations: EditOperation[];
   requiresApproval?: boolean;
   approvalReason?: string;
+  executeNodeIds?: string[];
+  runApprovalRequired?: boolean;
 };
 
 type ChatMsg = {
@@ -36,12 +38,14 @@ export function FlowyAgentPanel({
   isOpen,
   onClose,
   onApplyEdits,
+  onRunNodeIds,
   workflowState,
   selectedNodeIds,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onApplyEdits?: (operations: EditOperation[]) => { applied: number; skipped: string[] };
+  onRunNodeIds?: (nodeIds: string[]) => void | Promise<void>;
   workflowState?: WorkflowState;
   selectedNodeIds?: string[];
 }) {
@@ -53,8 +57,13 @@ export function FlowyAgentPanel({
   const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
   const [pendingOperations, setPendingOperations] = useState<EditOperation[] | null>(null);
   const [pendingExplanation, setPendingExplanation] = useState<string | null>(null);
+  const [pendingExecuteNodeIds, setPendingExecuteNodeIds] = useState<string[] | null>(null);
+  const [pendingRunApprovalRequired, setPendingRunApprovalRequired] = useState<boolean>(true);
   const [executionIndex, setExecutionIndex] = useState<number>(0);
   const [applyMode, setApplyMode] = useState<"manual" | "auto">("manual");
+  const [mentionedNodeIds, setMentionedNodeIds] = useState<string[]>([]);
+  const [isNodePickerOpen, setIsNodePickerOpen] = useState(false);
+  const [nodePickerQuery, setNodePickerQuery] = useState("");
   const [cursor, setCursor] = useState<{ x: number; y: number; visible: boolean }>({
     x: 0,
     y: 0,
@@ -62,6 +71,7 @@ export function FlowyAgentPanel({
   });
   const [isExecutingStep, setIsExecutingStep] = useState(false);
   const autoRunIdRef = useRef(0);
+  const autoRunCompletedRef = useRef(false);
 
   const stateForRequest = useMemo(() => {
     // Ensure we always send a consistent shape.
@@ -72,8 +82,14 @@ export function FlowyAgentPanel({
     };
   }, [workflowState]);
 
+  const contextNodeIds = useMemo(() => {
+    const selected = selectedNodeIds ?? [];
+    const mentioned = mentionedNodeIds ?? [];
+    return Array.from(new Set([...selected, ...mentioned]));
+  }, [selectedNodeIds, mentionedNodeIds]);
+
   const selectedContextSummary = useMemo(() => {
-    const ids = selectedNodeIds ?? [];
+    const ids = contextNodeIds;
     if (!workflowState || ids.length === 0) return null;
     const types = workflowState.nodes
       .filter((n) => ids.includes(n.id))
@@ -81,7 +97,20 @@ export function FlowyAgentPanel({
       .filter(Boolean);
     const unique = Array.from(new Set(types));
     return { count: ids.length, types: unique.slice(0, 4) };
-  }, [selectedNodeIds, workflowState]);
+  }, [contextNodeIds, workflowState]);
+
+  const nodePickerItems = useMemo(() => {
+    if (!workflowState) return [];
+    const q = nodePickerQuery.trim().toLowerCase();
+    return workflowState.nodes
+      .filter((n) => {
+        if (!q) return true;
+        const customTitle = (n.data as any)?.customTitle;
+        const label = typeof customTitle === "string" ? customTitle : n.type;
+        return label.toLowerCase().includes(q);
+      })
+      .sort((a, b) => a.type.localeCompare(b.type));
+  }, [nodePickerQuery, workflowState]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -105,7 +134,7 @@ export function FlowyAgentPanel({
         body: JSON.stringify({
           message: trimmed,
           workflowState: stateForRequest,
-          selectedNodeIds,
+          selectedNodeIds: contextNodeIds,
         }),
       });
 
@@ -114,8 +143,16 @@ export function FlowyAgentPanel({
         throw new Error(err?.error || `Plan failed (${res.status})`);
       }
 
-      const data = (await res.json()) as ({ ok: boolean; error?: string } & FlowyPlanResponse);
-      if (!data.ok) throw new Error(data.error || "Plan failed");
+      const data = (await res.json()) as ({ ok: boolean; error?: string } & FlowyPlanResponse) & {
+        debugLastText?: string;
+      };
+      if (!data.ok) {
+        const debugSnippet =
+          typeof data.debugLastText === "string" && data.debugLastText.trim().length
+            ? `\n\nLLM output (truncated):\n${data.debugLastText.slice(0, 800)}`
+            : "";
+        throw new Error((data.error || "Plan failed") + debugSnippet);
+      }
 
       const assistantText = data.assistantText ?? "";
       const ops = data.operations ?? [];
@@ -123,6 +160,9 @@ export function FlowyAgentPanel({
       setPendingOperations(ops);
       setPendingExplanation(assistantText);
       setExecutionIndex(0);
+      setPendingExecuteNodeIds(data.executeNodeIds ?? null);
+      setPendingRunApprovalRequired(data.runApprovalRequired ?? true);
+      autoRunCompletedRef.current = false;
       setCursor((c) => ({ ...c, visible: false }));
       setChatMessages((prev) => [
         ...prev,
@@ -136,7 +176,7 @@ export function FlowyAgentPanel({
     } finally {
       setIsPlanning(false);
     }
-  }, [input, isPlanning, selectedNodeIds, scrollToBottom, stateForRequest]);
+  }, [input, isPlanning, contextNodeIds, scrollToBottom, stateForRequest]);
 
   const handleApprove = useCallback(() => {
     // Keep for backward compatibility if a parent triggers bulk apply.
@@ -144,6 +184,8 @@ export function FlowyAgentPanel({
     onApplyEdits(pendingOperations);
     setPendingOperations(null);
     setPendingExplanation(null);
+    setPendingExecuteNodeIds(null);
+    autoRunCompletedRef.current = true;
     setExecutionIndex(0);
   }, [onApplyEdits, pendingOperations]);
 
@@ -244,6 +286,20 @@ export function FlowyAgentPanel({
     setIsExecutingStep(false);
     setCursor((c) => ({ ...c, visible: false }));
   }, []);
+
+  useEffect(() => {
+    if (!pendingOperations) return;
+    if (executionIndex < pendingOperations.length) return;
+    if (!pendingExecuteNodeIds || pendingExecuteNodeIds.length === 0) return;
+    if (!onRunNodeIds) return;
+    if (applyMode !== "auto") return;
+    if (autoRunCompletedRef.current) return;
+    autoRunCompletedRef.current = true;
+    // Auto-run after all edits applied
+    (async () => {
+      await onRunNodeIds(pendingExecuteNodeIds);
+    })();
+  }, [applyMode, executionIndex, onRunNodeIds, pendingExecuteNodeIds, pendingOperations]);
 
   // Auto-apply mode: run through all pending operations sequentially.
   useEffect(() => {
@@ -390,6 +446,7 @@ export function FlowyAgentPanel({
                     stopAutoRun();
                     setPendingOperations(null);
                     setPendingExplanation(null);
+                    setPendingExecuteNodeIds(null);
                     resetExecution();
                   }}
                   className="px-3 py-2 text-xs text-neutral-300 hover:text-neutral-100 transition-colors rounded-lg border border-neutral-600 bg-neutral-800/40"
@@ -426,18 +483,34 @@ export function FlowyAgentPanel({
 
             {executionIndex >= pendingOperations.length && (
               <div className="flex gap-2 mt-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    stopAutoRun();
-                    setPendingOperations(null);
-                    setPendingExplanation(null);
-                    resetExecution();
-                  }}
-                  className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                >
-                  Done
-                </button>
+                {pendingExecuteNodeIds && pendingExecuteNodeIds.length > 0 && pendingRunApprovalRequired && applyMode === "manual" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!pendingExecuteNodeIds || !onRunNodeIds) return;
+                      onRunNodeIds(pendingExecuteNodeIds);
+                    }}
+                    className="flex-1 bg-green-600 hover:bg-green-500 text-white rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                  >
+                    Approve run ({pendingExecuteNodeIds.length})
+                  </button>
+                )}
+
+                {(!pendingExecuteNodeIds || pendingExecuteNodeIds.length === 0 || !pendingRunApprovalRequired || applyMode !== "manual") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      stopAutoRun();
+                      setPendingOperations(null);
+                      setPendingExplanation(null);
+                      setPendingExecuteNodeIds(null);
+                      resetExecution();
+                    }}
+                    className="flex-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                  >
+                    Done
+                  </button>
+                )}
               </div>
             )}
 
@@ -480,6 +553,15 @@ export function FlowyAgentPanel({
             handlePlan();
           }}
         >
+          <button
+            type="button"
+            onClick={() => setIsNodePickerOpen(true)}
+            className="w-11 shrink-0 bg-neutral-700/40 hover:bg-neutral-700 text-neutral-200 rounded-lg border border-neutral-600 flex items-center justify-center"
+            title="Add @ node context"
+            aria-label="Add node context"
+          >
+            <span className="text-sm font-semibold">@</span>
+          </button>
           <input
             type="text"
             value={input}
@@ -499,6 +581,103 @@ export function FlowyAgentPanel({
           </button>
         </form>
       </div>
+
+      {/* Node context picker (@ mention) */}
+      {isNodePickerOpen && workflowState && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center"
+          onMouseDown={() => setIsNodePickerOpen(false)}
+        >
+          <div
+            className="bg-neutral-800 border border-neutral-700 rounded-xl shadow-xl w-[520px] max-w-[92vw]"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-neutral-700 flex items-center justify-between gap-3">
+              <div className="flex flex-col">
+                <h4 className="text-sm font-medium text-neutral-200">Node context (@)</h4>
+                <p className="text-xs text-neutral-400">Select nodes to give Flowy more accurate context.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNodePickerOpen(false)}
+                className="text-neutral-400 hover:text-neutral-200 transition-colors p-1"
+                aria-label="Close node context picker"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-4">
+              <input
+                type="text"
+                value={nodePickerQuery}
+                onChange={(e) => setNodePickerQuery(e.target.value)}
+                placeholder="Search by custom title or type..."
+                className="w-full bg-neutral-900/40 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-blue-500"
+              />
+
+              <div className="mt-3 max-h-[320px] overflow-y-auto pr-1">
+                {nodePickerItems.length === 0 ? (
+                  <div className="text-xs text-neutral-500 py-6 text-center">No nodes match.</div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2">
+                    {nodePickerItems.slice(0, 60).map((n) => {
+                      const id = n.id;
+                      const customTitle = (n.data as any)?.customTitle;
+                      const label = typeof customTitle === "string" && customTitle.trim().length ? customTitle : n.type;
+                      const active = contextNodeIds.includes(id);
+
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => {
+                            setMentionedNodeIds((prev) => {
+                              const has = prev.includes(id);
+                              // toggling: only mentioned nodes are toggled; canvas-selected remain active via props.
+                              return has ? prev.filter((x) => x !== id) : [...prev, id];
+                            });
+                          }}
+                          className={`text-left px-3 py-2 rounded-lg border transition-colors ${
+                            active
+                              ? "bg-blue-900/20 border-blue-700/50 text-blue-200"
+                              : "bg-neutral-800/30 border-neutral-700 text-neutral-300 hover:bg-neutral-800/60"
+                          }`}
+                        >
+                          <div className="text-sm truncate">{label}</div>
+                          <div className="text-[11px] text-neutral-500">{n.type}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMentionedNodeIds([]);
+                    setNodePickerQuery("");
+                  }}
+                  className="px-3 py-2 text-xs text-neutral-300 hover:text-neutral-100 transition-colors rounded-lg border border-neutral-600 bg-neutral-800/30"
+                >
+                  Clear mentions
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsNodePickerOpen(false)}
+                  className="px-3 py-2 text-xs text-white hover:bg-blue-500 transition-colors rounded-lg bg-blue-600"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cursor overlay (purely visual, no DOM clicking) */}
       {cursor.visible && (
