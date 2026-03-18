@@ -15,7 +15,7 @@ import { ProviderModel } from "@/lib/providers/types";
 import { ReactFlowProvider } from "@xyflow/react";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { useInlineParameters } from "@/hooks/useInlineParameters";
-import { SlidersHorizontal, FolderOpen, Key, Box, X } from "lucide-react";
+import { SlidersHorizontal, FolderOpen, Key, Box, RefreshCcw, X } from "lucide-react";
 
 // LLM provider and model options (mirrored from LLMGenerateNode)
 const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
@@ -158,7 +158,7 @@ export function ProjectSetupModal({
   const { inlineParametersEnabled, setInlineParameters } = useInlineParameters();
 
   // Tab state - "preferences" = app-wide + canvas, "project" = this project only
-  const [activeTab, setActiveTab] = useState<"preferences" | "project" | "providers" | "nodeDefaults">("preferences");
+  const [activeTab, setActiveTab] = useState<"preferences" | "project" | "providers" | "nodeDefaults" | "updates">("preferences");
 
   // Project tab state
   const [name, setName] = useState("");
@@ -204,6 +204,11 @@ export function ProjectSetupModal({
 
   // Canvas tab state
   const [localCanvasSettings, setLocalCanvasSettings] = useState<CanvasNavigationSettings>(canvasNavigationSettings);
+
+  // App update (git pull main)
+  const [isUpdatingFromMain, setIsUpdatingFromMain] = useState(false);
+  const [updateFromMainOutput, setUpdateFromMainOutput] = useState<string | null>(null);
+  const [updateFromMainError, setUpdateFromMainError] = useState<string | null>(null);
 
   // Pre-fill when opening in settings mode
   useEffect(() => {
@@ -264,8 +269,35 @@ export function ProjectSetupModal({
         .then((res) => res.json())
         .then((data: EnvStatusResponse) => setEnvStatus(data))
         .catch(() => setEnvStatus(null));
+
+      setIsUpdatingFromMain(false);
+      setUpdateFromMainOutput(null);
+      setUpdateFromMainError(null);
     }
   }, [isOpen, mode, workflowName, workflowThumbnail, saveDirectoryPath, useExternalImageStorage, providerSettings, canvasNavigationSettings]);
+
+  const handleUpdateFromMain = async () => {
+    setIsUpdatingFromMain(true);
+    setUpdateFromMainOutput(null);
+    setUpdateFromMainError(null);
+    try {
+      const res = await fetch("/api/git-pull-main", { method: "POST" });
+      const data = await res.json();
+      if (!data?.success) {
+        const message = typeof data?.error === "string" ? data.error : "Update failed";
+        setUpdateFromMainError(message);
+        if (typeof data?.details === "string" && data.details.trim()) {
+          setUpdateFromMainOutput(data.details);
+        }
+        return;
+      }
+      setUpdateFromMainOutput(typeof data?.output === "string" && data.output.trim() ? data.output : "Already up to date.");
+    } catch (err) {
+      setUpdateFromMainError(err instanceof Error ? err.message : "Update failed");
+    } finally {
+      setIsUpdatingFromMain(false);
+    }
+  };
 
   const handleBrowse = async () => {
     setIsBrowsing(true);
@@ -417,6 +449,8 @@ export function ProjectSetupModal({
       handleSaveProject();
     } else if (activeTab === "providers") {
       handleSaveProviders();
+    } else if (activeTab === "updates") {
+      onClose();
     } else {
       handleSaveNodeDefaults();
     }
@@ -453,6 +487,7 @@ export function ProjectSetupModal({
     { id: "project" as const, label: "Project", icon: FolderOpen },
     { id: "providers" as const, label: "Providers", icon: Key },
     { id: "nodeDefaults" as const, label: "Node Defaults", icon: Box },
+    { id: "updates" as const, label: "Updates", icon: RefreshCcw },
   ];
 
   return (
@@ -1591,6 +1626,45 @@ export function ProjectSetupModal({
             <p className="text-xs text-neutral-400 mt-2">
               These defaults are applied when creating nodes via keyboard shortcuts (Shift+G, Shift+L, etc).
             </p>
+          </div>
+        )}
+
+        {/* Updates Tab Content */}
+        {activeTab === "updates" && (
+          <div className="space-y-4">
+            <p className="text-xs text-neutral-500 mb-2">
+              Update the app by pulling the latest changes from <code className="px-1 py-0.5 bg-neutral-800 rounded">main</code>.
+            </p>
+            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-neutral-100">Update from main</div>
+                  <p className="text-xs text-neutral-400">
+                    Runs <code className="px-1 py-0.5 bg-neutral-800 rounded">git pull --ff-only origin main</code> in the app repo.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleUpdateFromMain}
+                  disabled={isUpdatingFromMain}
+                  className="shrink-0 px-3 py-2 bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-700 disabled:opacity-50 text-neutral-200 text-sm rounded-lg transition-colors"
+                >
+                  {isUpdatingFromMain ? "Updating..." : "Update"}
+                </button>
+              </div>
+              {(updateFromMainError || updateFromMainOutput) && (
+                <div className="mt-3 space-y-2">
+                  {updateFromMainError && (
+                    <div className="text-xs text-red-400">{updateFromMainError}</div>
+                  )}
+                  {updateFromMainOutput && (
+                    <pre className="text-[11px] leading-relaxed whitespace-pre-wrap break-words bg-neutral-950/40 border border-neutral-800 rounded-md p-2 text-neutral-200 max-h-56 overflow-auto">
+                      {updateFromMainOutput}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
