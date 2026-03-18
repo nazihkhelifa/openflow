@@ -15,10 +15,35 @@ from __future__ import annotations
 import os
 import json
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("flowy-canvas-server")
+
+def _get_site_base_url() -> str:
+    # Used for HTTP bridge tools that call your Next.js API routes.
+    # Default matches typical Next.js dev server port.
+    return os.environ.get("FLOWY_SITE_BASE_URL", "http://localhost:3000").rstrip("/")
+
+
+def _post_json(url: str, payload: Dict[str, Any], timeout_s: int = 90) -> Dict[str, Any]:
+    data = json.dumps(payload).encode("utf-8")
+    req = Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urlopen(req, timeout=timeout_s) as resp:
+            raw = resp.read().decode("utf-8")
+            return json.loads(raw)
+    except HTTPError as e:
+        body = ""
+        try:
+            body = e.read().decode("utf-8")
+        except Exception:
+            pass
+        raise RuntimeError(f"HTTP {e.code} calling {url}: {body[:500]}") from e
+    except URLError as e:
+        raise RuntimeError(f"Network error calling {url}: {e}") from e
 
 
 @mcp.tool()
@@ -510,6 +535,80 @@ def plan_edits(
         "operations": operations,
         "requiresApproval": True,
         "approvalReason": "Assist mode: user approval required before applying edits.",
+    }
+
+
+@mcp.tool()
+def plan_edits_web(
+    message: str,
+    workflow_state: Dict[str, Any],
+    selected_node_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Plan edit operations by calling the website planner endpoint.
+
+    This tool expects the caller to provide the current canvas state
+    (nodes + edges) because the canvas state is not persisted server-side.
+    """
+    selected_node_ids = selected_node_ids or []
+    base_url = _get_site_base_url()
+    result = _post_json(
+        f"{base_url}/api/flowy/plan",
+        {
+            "message": message,
+            "workflowState": workflow_state,
+            "selectedNodeIds": selected_node_ids,
+        },
+    )
+    return result
+
+
+@mcp.tool()
+def plan_and_apply_edits_web(
+    message: str,
+    workflow_state: Dict[str, Any],
+    selected_node_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Plan + apply edits by calling the website planner and apply endpoints.
+
+    Returns the updated workflow state computed by /api/flowy/apply.
+    Note: the website apply route is pure (takes workflowState as input),
+    so callers must provide the current workflow_state.
+    """
+    selected_node_ids = selected_node_ids or []
+    base_url = _get_site_base_url()
+
+    plan = _post_json(
+        f"{base_url}/api/flowy/plan",
+        {
+            "message": message,
+            "workflowState": workflow_state,
+            "selectedNodeIds": selected_node_ids,
+        },
+    )
+
+    if not isinstance(plan, dict) or not plan.get("ok"):
+        return plan
+
+    operations = plan.get("operations") or []
+    applied = _post_json(
+        f"{base_url}/api/flowy/apply",
+        {
+            "workflowState": workflow_state,
+            "operations": operations,
+        },
+    )
+    # Combine plan metadata + apply result so clients can render cursor/timeline too.
+    return {
+        "ok": applied.get("ok", False),
+        "assistantText": plan.get("assistantText", ""),
+        "operations": operations,
+        "requiresApproval": False,
+        "applied": applied.get("applied"),
+        "skipped": applied.get("skipped"),
+        "nodes": applied.get("nodes"),
+        "edges": applied.get("edges"),
     }
 
 
