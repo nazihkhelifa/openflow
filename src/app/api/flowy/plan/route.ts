@@ -15,25 +15,55 @@ type PlanRequest = {
   model?: string;
 };
 
-function resolvePythonExecutable(repoRoot: string): string {
+const FLOWY_VENV_HINT =
+  "Run `npm run flowy:venv` (requires uv: https://docs.astral.sh/uv/) to create backend/.venv, " +
+  "or set FLOWY_PYTHON to the full path of python.exe.";
+
+type FlowySpawn = {
+  command: string;
+  args: string[];
+  cwd?: string;
+};
+
+/**
+ * Prefer, in order: FLOWY_PYTHON, backend/.venv Python, then `uv run` (no bare `python` on PATH —
+ * avoids Windows Store stub / exit 9009 when Python isn't installed globally).
+ */
+function resolveFlowyPlannerSpawn(repoRoot: string): FlowySpawn {
+  const scriptAbs = path.join(repoRoot, "backend", "flowy_deepagents", "content_writer.py");
+  const scriptFromBackend = path.join("flowy_deepagents", "content_writer.py");
+
+  const flowyPython = process.env.FLOWY_PYTHON?.trim();
+  if (flowyPython && existsSync(flowyPython)) {
+    return { command: flowyPython, args: [scriptAbs] };
+  }
+
   const winVenv = path.join(repoRoot, "backend", ".venv", "Scripts", "python.exe");
   const posixVenv = path.join(repoRoot, "backend", ".venv", "bin", "python");
-  if (existsSync(winVenv)) return winVenv;
-  if (existsSync(posixVenv)) return posixVenv;
-  return process.platform === "win32" ? "python" : "python3";
+  if (existsSync(winVenv)) {
+    return { command: winVenv, args: [scriptAbs] };
+  }
+  if (existsSync(posixVenv)) {
+    return { command: posixVenv, args: [scriptAbs] };
+  }
+
+  return {
+    command: "uv",
+    args: ["run", "--directory", "backend", "python", scriptFromBackend],
+    cwd: repoRoot,
+  };
 }
 
 function runFlowyPlanner(payload: PlanRequest): Promise<any> {
   const repoRoot = process.cwd();
-  const pythonPath = resolvePythonExecutable(repoRoot);
-  const deepScriptPath = path.join(repoRoot, "backend", "flowy_deepagents", "content_writer.py");
+  const { command, args, cwd } = resolveFlowyPlannerSpawn(repoRoot);
 
   return new Promise((resolve, reject) => {
-    const scriptPath = deepScriptPath;
-
-    const child = spawn(pythonPath, [scriptPath], {
+    const child = spawn(command, args, {
       stdio: ["pipe", "pipe", "pipe"],
       windowsHide: true,
+      cwd: cwd ?? repoRoot,
+      env: process.env,
     });
 
     let stdout = "";
@@ -46,7 +76,13 @@ function runFlowyPlanner(payload: PlanRequest): Promise<any> {
       stderr += chunk.toString();
     });
 
-    child.on("error", (err) => reject(err));
+    child.on("error", (err) => {
+      const extra =
+        command === "uv"
+          ? ` ${FLOWY_VENV_HINT} If uv is not installed, install it or use FLOWY_PYTHON.`
+          : ` ${FLOWY_VENV_HINT}`;
+      reject(err instanceof Error ? new Error(`${err.message}${extra}`) : err);
+    });
 
     child.on("close", (code) => {
       try {
@@ -60,7 +96,11 @@ function runFlowyPlanner(payload: PlanRequest): Promise<any> {
         resolve(parsed);
       } catch (e) {
         if (code !== 0) {
-          reject(new Error(`Flowy planner exited with code ${code}: ${stderr || stdout}`));
+          const hint =
+            code === 9009 || /introuvable|not recognized|ENOENT/i.test(stderr + stdout)
+              ? ` ${FLOWY_VENV_HINT}`
+              : "";
+          reject(new Error(`Flowy planner exited with code ${code}: ${stderr || stdout}${hint}`));
           return;
         }
         reject(

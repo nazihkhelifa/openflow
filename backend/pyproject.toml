@@ -1,0 +1,13 @@
+[project]
+name = "openflows-flowy"
+version = "0.1.0"
+description = "Python runtime for the Flowy canvas planner (LangChain + OpenAI JSON mode)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "langchain-core>=0.3.29",
+  "langchain-openai>=0.2.14",
+]
+
+[tool.uv]
+package = false

@@ -41,6 +41,7 @@ Configure API keys in Project Settings to enable these providers.
 
 - Node.js 18+
 - npm
+- **Flowy canvas agent:** [uv](https://docs.astral.sh/uv/) + Python 3.11+ — after `npm install`, run **`npm run flowy:venv`** once to create `backend/.venv` (see `backend/README.md`).
 
 ### Environment Variables
 
@@ -57,6 +58,7 @@ FAL_API_KEY=your_fal_api_key              # Optional, beta
 
 ```bash
 npm install
+npm run flowy:venv
 ```
 
 ### Development

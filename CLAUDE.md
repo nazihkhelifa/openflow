@@ -11,6 +11,7 @@ npm run start    # Start production server
 npm run lint     # Run Next.js linting
 npm run test     # Run all tests with Vitest (watch mode)
 npm run test:run # Run all tests once (CI mode)
+npm run flowy:venv # Create backend/.venv for Flowy planner (requires uv)
 ```
 
 ## Environment Setup
@@ -18,9 +19,11 @@ npm run test:run # Run all tests once (CI mode)
 Create `.env.local` in the root directory:
 ```
 GEMINI_API_KEY=your_gemini_api_key
-OPENAI_API_KEY=your_openai_api_key  # Optional, for OpenAI LLM provider
+OPENAI_API_KEY=your_openai_api_key  # Required for Flowy planner; optional elsewhere for OpenAI LLM
 KIE_API_KEY=your_kie_api_key        # Optional, for Kie.ai models (Sora, Veo, Kling, etc.)
 ```
+
+**Flowy planner (Python):** Install [uv](https://docs.astral.sh/uv/), then run `npm run flowy:venv` once. Next.js uses `backend/.venv` or falls back to `uv run --directory backend`. Optional: `FLOWY_PYTHON` = absolute path to `python.exe`.
 
 ## Architecture Overview
 
