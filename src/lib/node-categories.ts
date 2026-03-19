@@ -33,12 +33,4 @@ export const ALL_NODES_CATEGORIES: {
       { type: "imageCompare", label: "Image Compare" },
     ],
   },
-  {
-    label: "Route",
-    nodes: [
-      { type: "router", label: "Router" },
-      { type: "switch", label: "Switch" },
-      { type: "conditionalSwitch", label: "Conditional Switch" },
-    ],
-  },
 ];

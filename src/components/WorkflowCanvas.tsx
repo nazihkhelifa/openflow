@@ -1283,9 +1283,6 @@ export function WorkflowCanvas() {
           case "p":
             nodeType = "prompt";
             break;
-          case "r":
-            nodeType = "router";
-            break;
           case "i":
             nodeType = "mediaInput";
             break;

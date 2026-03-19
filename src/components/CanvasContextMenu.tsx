@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { useReactFlow } from "@xyflow/react";
 import type { NodeType } from "@/types";
-import { ALL_NODES_CATEGORIES } from "@/lib/node-categories";
+import { CANVAS_MENU_SECTIONS } from "@/lib/canvasMenuSections";
 
 interface CanvasContextMenuProps {
   position: { x: number; y: number };
@@ -244,11 +244,8 @@ export function CanvasContextMenu({ position, nodeId, onClose }: CanvasContextMe
         top: position.y,
       }}
     >
-      <div className="flex flex-col px-1 py-1">
-        <div className={sectionTitleClassName}>Add Node</div>
-      </div>
-      <div className="px-1 py-1 max-h-[320px] overflow-y-auto">
-        {ALL_NODES_CATEGORIES.map((category, catIndex) => (
+      <div className="px-1 py-1 max-h-[384px] overflow-y-auto">
+        {CANVAS_MENU_SECTIONS.map((category, catIndex) => (
           <div key={category.label}>
             <div
               className={`select-none px-3 py-2 text-[10px] text-neutral-500 uppercase tracking-wide${
