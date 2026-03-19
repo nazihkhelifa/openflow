@@ -57,7 +57,6 @@ export type NodeType =
   | "generateVideo"
   | "generateAudio"
   | "imageCompare"
-  | "videoStitch"
   | "easeCurve"
   | "videoFrameGrab"
   | "router"
@@ -287,31 +286,6 @@ export interface ImageCompareNodeData extends BaseNodeData {
 }
 
 /**
- * Video stitch clip - represents a single video clip in the filmstrip
- */
-export interface VideoStitchClip {
-  edgeId: string;                // Edge ID for disconnect capability
-  sourceNodeId: string;          // Source node producing this video
-  thumbnail: string | null;      // Base64 JPEG thumbnail
-  duration: number | null;       // Clip duration in seconds
-  handleId: string;              // Which input handle (video-0, video-1, etc.)
-}
-
-/**
- * Video Stitch node - concatenates multiple videos into a single output
- */
-export interface VideoStitchNodeData extends BaseNodeData {
-  clips: VideoStitchClip[];       // Ordered clip sequence for filmstrip
-  clipOrder: string[];            // Edge IDs in user-defined order (drag reorder)
-  outputVideo: string | null;     // Stitched video blob URL or data URL
-  loopCount: 1 | 2 | 3;          // How many times to repeat the clip sequence (1 = no loop)
-  status: NodeStatus;
-  error: string | null;
-  progress: number;               // 0-100 processing progress
-  encoderSupported: boolean | null; // null = not checked yet, true/false after check
-}
-
-/**
  * Ease Curve node - applies speed curve to video using easing functions
  */
 export interface EaseCurveNodeData extends BaseNodeData {
@@ -426,7 +400,6 @@ export type WorkflowNodeData =
   | Generate3DNodeData
   | GenerateAudioNodeData
   | ImageCompareNodeData
-  | VideoStitchNodeData
   | EaseCurveNodeData
   | VideoFrameGrabNodeData
   | RouterNodeData

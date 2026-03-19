@@ -69,7 +69,6 @@ import {
   executeGenerateVideo,
   executeGenerate3D,
   executeGenerateAudio,
-  executeVideoStitch,
   executeEaseCurve,
   executeVideoFrameGrab,
   executeGlbViewer,
@@ -1161,9 +1160,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
           case "imageCompare":
             await executeImageCompare(executionCtx);
             break;
-          case "videoStitch":
-            await executeVideoStitch(executionCtx);
-            break;
           case "easeCurve":
             await executeEaseCurve(executionCtx);
             break;
@@ -1315,11 +1311,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         await executeGenerate3D(executionCtx, regenOptions);
       } else if (node.type === "generateAudio") {
         await executeGenerateAudio(executionCtx, regenOptions);
-      } else if (node.type === "videoStitch") {
-        await executeVideoStitch(executionCtx);
-        set({ isRunning: false, currentNodeIds: [] });
-        await logger.endSession();
-        return;
       } else if (node.type === "easeCurve") {
         await executeEaseCurve(executionCtx);
         set({ isRunning: false, currentNodeIds: [] });
@@ -1447,9 +1438,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
           break;
         case "imageCompare":
           await executeImageCompare(executionCtx);
-          break;
-        case "videoStitch":
-          await executeVideoStitch(executionCtx);
           break;
         case "easeCurve":
           await executeEaseCurve(executionCtx);

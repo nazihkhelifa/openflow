@@ -2507,17 +2507,14 @@ describe("workflowStore integration tests", () => {
         expect(group.size.height).toBeGreaterThanOrEqual(480); // Must account for 480px tall nodes
       });
 
-      it("should correctly calculate bounding box for videoStitch nodes (400x280)", () => {
+      it("should correctly calculate bounding box for videoFrameGrab nodes", () => {
         useWorkflowStore.setState({
           nodes: [
-            createTestNode("vs-1", "videoStitch", {
-              clips: [],
-              clipOrder: [],
-              outputVideo: null,
+            createTestNode("vf-1", "videoFrameGrab", {
+              framePosition: "first",
+              outputImage: null,
               status: "idle",
               error: null,
-              progress: 0,
-              encoderSupported: null,
             }, { x: 0, y: 0 }),
           ],
           edges: [],
@@ -2525,12 +2522,11 @@ describe("workflowStore integration tests", () => {
         });
 
         const store = useWorkflowStore.getState();
-        const groupId = store.createGroup(["vs-1"]);
+        const groupId = store.createGroup(["vf-1"]);
 
         const group = useWorkflowStore.getState().groups[groupId];
-        // videoStitch is 400x280, with padding=20: width = 400+40=440
-        expect(group.size.width).toBeGreaterThanOrEqual(400); // Must account for 400px wide node
-        expect(group.size.height).toBeGreaterThanOrEqual(280); // Must account for 280px tall node
+        expect(group.size.width).toBeGreaterThanOrEqual(300);
+        expect(group.size.height).toBeGreaterThanOrEqual(300);
       });
 
       it("should correctly calculate bounding box for audioInput nodes (300x200)", () => {
@@ -2558,7 +2554,7 @@ describe("workflowStore integration tests", () => {
     });
 
     describe("addNodesToGroup with non-standard node types", () => {
-      it("should assign groupId to easeCurve, videoStitch, and audioInput nodes", () => {
+      it("should assign groupId to easeCurve, videoFrameGrab, and audioInput nodes", () => {
         useWorkflowStore.setState({
           nodes: [
             createTestNode("ease-1", "easeCurve", {
@@ -2572,14 +2568,11 @@ describe("workflowStore integration tests", () => {
               progress: 0,
               encoderSupported: null,
             }),
-            createTestNode("vs-1", "videoStitch", {
-              clips: [],
-              clipOrder: [],
-              outputVideo: null,
+            createTestNode("vf-1", "videoFrameGrab", {
+              framePosition: "first",
+              outputImage: null,
               status: "idle",
               error: null,
-              progress: 0,
-              encoderSupported: null,
             }),
             createTestNode("audio-1", "audioInput", {
               audioFile: null,
@@ -2602,17 +2595,17 @@ describe("workflowStore integration tests", () => {
         });
 
         const store = useWorkflowStore.getState();
-        store.addNodesToGroup(["ease-1", "vs-1", "audio-1"], "group-1");
+        store.addNodesToGroup(["ease-1", "vf-1", "audio-1"], "group-1");
 
         const nodes = useWorkflowStore.getState().nodes;
         expect(nodes.find((n) => n.id === "ease-1")?.groupId).toBe("group-1");
-        expect(nodes.find((n) => n.id === "vs-1")?.groupId).toBe("group-1");
+        expect(nodes.find((n) => n.id === "vf-1")?.groupId).toBe("group-1");
         expect(nodes.find((n) => n.id === "audio-1")?.groupId).toBe("group-1");
       });
     });
 
     describe("setNodeGroupId with non-standard node types", () => {
-      it("should assign and remove groupId for easeCurve, videoStitch, and audioInput nodes", () => {
+      it("should assign and remove groupId for easeCurve, videoFrameGrab, and audioInput nodes", () => {
         useWorkflowStore.setState({
           nodes: [
             createTestNode("ease-1", "easeCurve", {
@@ -2626,14 +2619,11 @@ describe("workflowStore integration tests", () => {
               progress: 0,
               encoderSupported: null,
             }),
-            createTestNode("vs-1", "videoStitch", {
-              clips: [],
-              clipOrder: [],
-              outputVideo: null,
+            createTestNode("vf-1", "videoFrameGrab", {
+              framePosition: "first",
+              outputImage: null,
               status: "idle",
               error: null,
-              progress: 0,
-              encoderSupported: null,
             }),
             createTestNode("audio-1", "audioInput", {
               audioFile: null,
@@ -2650,28 +2640,28 @@ describe("workflowStore integration tests", () => {
 
         // Assign groupId
         store.setNodeGroupId("ease-1", "group-1");
-        store.setNodeGroupId("vs-1", "group-1");
+        store.setNodeGroupId("vf-1", "group-1");
         store.setNodeGroupId("audio-1", "group-1");
 
         let nodes = useWorkflowStore.getState().nodes;
         expect(nodes.find((n) => n.id === "ease-1")?.groupId).toBe("group-1");
-        expect(nodes.find((n) => n.id === "vs-1")?.groupId).toBe("group-1");
+        expect(nodes.find((n) => n.id === "vf-1")?.groupId).toBe("group-1");
         expect(nodes.find((n) => n.id === "audio-1")?.groupId).toBe("group-1");
 
         // Remove groupId
         store.setNodeGroupId("ease-1", undefined);
-        store.setNodeGroupId("vs-1", undefined);
+        store.setNodeGroupId("vf-1", undefined);
         store.setNodeGroupId("audio-1", undefined);
 
         nodes = useWorkflowStore.getState().nodes;
         expect(nodes.find((n) => n.id === "ease-1")?.groupId).toBeUndefined();
-        expect(nodes.find((n) => n.id === "vs-1")?.groupId).toBeUndefined();
+        expect(nodes.find((n) => n.id === "vf-1")?.groupId).toBeUndefined();
         expect(nodes.find((n) => n.id === "audio-1")?.groupId).toBeUndefined();
       });
     });
 
     describe("Locked group execution with non-standard node types", () => {
-      it("should skip easeCurve, videoStitch, and audioInput nodes in locked groups", async () => {
+      it("should skip easeCurve, videoFrameGrab, and audioInput nodes in locked groups", async () => {
         useWorkflowStore.setState({
           nodes: [
             { ...createTestNode("ease-1", "easeCurve", {
@@ -2685,14 +2675,11 @@ describe("workflowStore integration tests", () => {
               progress: 0,
               encoderSupported: null,
             }), groupId: "group-locked" },
-            { ...createTestNode("vs-1", "videoStitch", {
-              clips: [],
-              clipOrder: [],
-              outputVideo: null,
+            { ...createTestNode("vf-1", "videoFrameGrab", {
+              framePosition: "first",
+              outputImage: null,
               status: "idle",
               error: null,
-              progress: 0,
-              encoderSupported: null,
             }), groupId: "group-locked" },
             { ...createTestNode("audio-1", "audioInput", {
               audioFile: null,

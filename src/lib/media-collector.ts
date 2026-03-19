@@ -78,14 +78,6 @@ export function collectMediaItems(nodes: Node[]): MediaItem[] {
       if (imageB && isDisplayableUrl(imageB)) mediaItems.push({ url: imageB, type: "image", nodeId: node.id });
     }
 
-    // VideoStitchNode: outputVideo
-    if (node.type === "videoStitch") {
-      const outputVideo = data.outputVideo as string | null | undefined;
-      if (outputVideo && isDisplayableUrl(outputVideo)) {
-        mediaItems.push({ url: outputVideo, type: "video", nodeId: node.id });
-      }
-    }
-
     // EaseCurveNode: outputVideo
     if (node.type === "easeCurve") {
       const outputVideo = data.outputVideo as string | null | undefined;

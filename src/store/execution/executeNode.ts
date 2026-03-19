@@ -16,7 +16,7 @@ import {
 import { executeNanoBanana } from "./nanoBananaExecutor";
 import { executeGenerateVideo } from "./generateVideoExecutor";
 import { executeGenerate3D } from "./generate3dExecutor";
-import { executeVideoStitch, executeEaseCurve, executeVideoFrameGrab } from "./videoProcessingExecutors";
+import { executeEaseCurve, executeVideoFrameGrab } from "./videoProcessingExecutors";
 import { executeGenerateAudio } from "./generateAudioExecutor";
 
 export interface ExecuteNodeOptions {
@@ -64,9 +64,6 @@ export async function executeNode(
       break;
     case "imageCompare":
       await executeImageCompare(ctx);
-      break;
-    case "videoStitch":
-      await executeVideoStitch(ctx);
       break;
     case "easeCurve":
       await executeEaseCurve(ctx);

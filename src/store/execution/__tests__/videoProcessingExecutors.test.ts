@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { executeVideoStitch, executeEaseCurve } from "../videoProcessingExecutors";
+import { executeEaseCurve } from "../videoProcessingExecutors";
 import type { NodeExecutionContext } from "../types";
 import type { WorkflowNode } from "@/types";
 
@@ -55,83 +55,6 @@ function makeCtx(
 
 beforeEach(() => {
   vi.clearAllMocks();
-});
-
-describe("executeVideoStitch", () => {
-  function makeStitchNode(data: Record<string, unknown> = {}): WorkflowNode {
-    return {
-      id: "vs-1",
-      type: "videoStitch",
-      position: { x: 0, y: 0 },
-      data: {
-        outputVideo: null,
-        status: null,
-        error: null,
-        progress: 0,
-        encoderSupported: true,
-        loopCount: 1,
-        ...data,
-      },
-    } as WorkflowNode;
-  }
-
-  it("should error when encoder not supported", async () => {
-    const node = makeStitchNode({ encoderSupported: false });
-    const ctx = makeCtx(node);
-
-    await expect(executeVideoStitch(ctx)).rejects.toThrow("Browser does not support video encoding");
-
-    expect(ctx.updateNodeData).toHaveBeenCalledWith("vs-1", expect.objectContaining({
-      status: "error",
-      error: "Browser does not support video encoding",
-    }));
-  });
-
-  it("should error when fewer than 2 videos", async () => {
-    const node = makeStitchNode();
-    const ctx = makeCtx(node, {
-      getConnectedInputs: vi.fn().mockReturnValue({
-        images: [],
-        videos: ["single-video"],
-        audio: [],
-        text: null,
-        dynamicInputs: {},
-        easeCurve: null,
-      }),
-    });
-
-    await expect(executeVideoStitch(ctx)).rejects.toThrow("Need at least 2 video clips to stitch");
-
-    expect(ctx.updateNodeData).toHaveBeenCalledWith("vs-1", expect.objectContaining({
-      status: "error",
-      error: "Need at least 2 video clips to stitch",
-    }));
-  });
-
-  it("should set loading status with 0 progress", async () => {
-    const node = makeStitchNode();
-    const ctx = makeCtx(node, {
-      getConnectedInputs: vi.fn().mockReturnValue({
-        images: [],
-        videos: ["video1", "video2"],
-        audio: [],
-        text: null,
-        dynamicInputs: {},
-        easeCurve: null,
-      }),
-    });
-
-    // Will fail at fetch but we only care about the loading call
-    await executeVideoStitch(ctx).catch(() => {});
-
-    const calls = (ctx.updateNodeData as ReturnType<typeof vi.fn>).mock.calls;
-    const loadingCall = calls.find(
-      (c: unknown[]) =>
-        (c[1] as Record<string, unknown>).status === "loading" &&
-        (c[1] as Record<string, unknown>).progress === 0
-    );
-    expect(loadingCall).toBeDefined();
-  });
 });
 
 describe("executeEaseCurve", () => {

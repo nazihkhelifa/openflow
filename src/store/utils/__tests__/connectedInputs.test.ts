@@ -136,21 +136,25 @@ describe("getConnectedInputsPure", () => {
 
   it("should extract easeCurve data", () => {
     const nodes = [
-      makeNode("ec", "easeCurve", {
+      makeNode("ec-p", "easeCurve", {
         bezierHandles: [0.25, 0.1, 0.25, 1.0],
         easingPreset: "ease-in-out",
         outputVideo: null,
       }),
-      makeNode("vs", "videoStitch"),
+      makeNode("ec-c", "easeCurve", {
+        bezierHandles: [0, 0, 1, 1],
+        easingPreset: null,
+        outputVideo: null,
+      }),
     ];
     const edges = [{
-      id: "ec-vs",
-      source: "ec",
-      target: "vs",
+      id: "ec-p-ec-c",
+      source: "ec-p",
+      target: "ec-c",
       sourceHandle: "easeCurve",
       targetHandle: "easeCurve",
     }] as WorkflowEdge[];
-    const result = getConnectedInputsPure("vs", nodes, edges);
+    const result = getConnectedInputsPure("ec-c", nodes, edges);
     expect(result.easeCurve).toEqual({
       bezierHandles: [0.25, 0.1, 0.25, 1.0],
       easingPreset: "ease-in-out",

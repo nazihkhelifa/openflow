@@ -32,7 +32,7 @@ Each operation MUST be one of:
 - For `addEdge`, always include both `sourceHandle` and `targetHandle`.
 - Allowed handles: `image`, `text`, `audio`, `video`, `3d`, `easeCurve`, `reference`.
 - Only use node types that exist in this app:
-  `mediaInput`, `imageInput`, `audioInput`, `annotation`, `comment`, `prompt`, `generateImage`, `generateVideo`, `generateAudio`, `imageCompare`, `videoStitch`, `easeCurve`, `videoFrameGrab`, `router`, `switch`, `conditionalSwitch`, `generate3d`, `glbViewer`.
+  `mediaInput`, `imageInput`, `audioInput`, `annotation`, `comment`, `prompt`, `generateImage`, `generateVideo`, `generateAudio`, `imageCompare`, `easeCurve`, `videoFrameGrab`, `router`, `switch`, `conditionalSwitch`, `generate3d`, `glbViewer`.
 
 ## What to do
 - Read the user's message and the **Current workflow** JSON in the user prompt:

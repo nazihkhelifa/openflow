@@ -42,7 +42,6 @@ export const defaultNodeDimensions: Record<NodeType, { width: number; height: nu
   generate3d: { width: 300, height: 300 },
   generateAudio: { width: 300, height: 280 },
   imageCompare: { width: 400, height: 360 },
-  videoStitch: { width: SQUARE_SIZE, height: SQUARE_SIZE },
   easeCurve: { width: SQUARE_SIZE, height: SQUARE_SIZE },
   videoFrameGrab: { width: SQUARE_SIZE, height: SQUARE_SIZE },
   router: { width: 200, height: 80 },
@@ -221,17 +220,6 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         imageA: null,
         imageB: null,
       } as ImageCompareNodeData;
-    case "videoStitch":
-      return {
-        clips: [],
-        clipOrder: [],
-        outputVideo: null,
-        loopCount: 1,
-        status: "idle",
-        error: null,
-        progress: 0,
-        encoderSupported: null,
-      };
     case "easeCurve":
       return {
         bezierHandles: [0.445, 0.05, 0.55, 0.95], // easeInOutSine preset

@@ -1,119 +1,13 @@
 /**
  * Video Processing Executors
  *
- * Unified executors for videoStitch and easeCurve nodes.
+ * Executors for easeCurve and videoFrameGrab nodes.
  * Used by both executeWorkflow and regenerateNode.
  */
 
-import type { VideoStitchNodeData, EaseCurveNodeData, VideoFrameGrabNodeData } from "@/types";
+import type { EaseCurveNodeData, VideoFrameGrabNodeData } from "@/types";
 import { revokeBlobUrl } from "@/store/utils/executionUtils";
 import type { NodeExecutionContext } from "./types";
-
-/**
- * VideoStitch: combines multiple video clips into a single output.
- */
-export async function executeVideoStitch(ctx: NodeExecutionContext): Promise<void> {
-  const { node, getConnectedInputs, updateNodeData, getNodes } = ctx;
-  const nodeData = node.data as VideoStitchNodeData;
-
-  if (nodeData.encoderSupported === false) {
-    updateNodeData(node.id, {
-      status: "error",
-      error: "Browser does not support video encoding",
-      progress: 0,
-    });
-    throw new Error("Browser does not support video encoding");
-  }
-
-  updateNodeData(node.id, { status: "loading", progress: 0, error: null });
-
-  try {
-    const inputs = getConnectedInputs(node.id);
-
-    if (inputs.videos.length < 2) {
-      updateNodeData(node.id, {
-        status: "error",
-        error: "Need at least 2 video clips to stitch",
-        progress: 0,
-      });
-      throw new Error("Need at least 2 video clips to stitch");
-    }
-
-    const videoBlobs = await Promise.all(
-      inputs.videos.map((v) => fetch(v).then((r) => r.blob()))
-    );
-
-    // Duplicate blobs based on loopCount (2x or 3x repeats the sequence)
-    const loopCount = nodeData.loopCount || 1;
-    const loopedBlobs =
-      loopCount > 1
-        ? Array.from({ length: loopCount }, () =>
-            videoBlobs.map((b) => new Blob([b], { type: b.type }))
-          ).flat()
-        : videoBlobs;
-
-    // Prepare audio if connected
-    let audioData = null;
-    if (inputs.audio.length > 0 && inputs.audio[0]) {
-      const { prepareAudioAsync } = await import("@/hooks/useAudioMixing");
-      const audioUrl = inputs.audio[0];
-      const audioResponse = await fetch(audioUrl);
-      const rawBlob = await audioResponse.blob();
-      const audioMime =
-        rawBlob.type ||
-        (audioUrl.startsWith("data:")
-          ? audioUrl.split(";")[0].split(":")[1]
-          : "audio/mpeg");
-      const audioBlob = rawBlob.type
-        ? rawBlob
-        : new Blob([rawBlob], { type: audioMime });
-      audioData = await prepareAudioAsync(audioBlob, 0);
-    }
-
-    const { stitchVideosAsync } = await import("@/hooks/useStitchVideos");
-    const outputBlob = await stitchVideosAsync(
-      loopedBlobs,
-      audioData,
-      (progress) => {
-        updateNodeData(node.id, { progress: progress.progress });
-      }
-    );
-
-    // Revoke old blob URL before replacing
-    const oldData = getNodes().find((n) => n.id === node.id)?.data as
-      | Record<string, unknown>
-      | undefined;
-    revokeBlobUrl(oldData?.outputVideo as string | undefined);
-
-    let outputVideo: string;
-    if (outputBlob.size > 20 * 1024 * 1024) {
-      outputVideo = URL.createObjectURL(outputBlob);
-    } else {
-      const reader = new FileReader();
-      outputVideo = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("FileReader error while reading stitched video"));
-        reader.onabort = () => reject(new Error("FileReader aborted while reading stitched video"));
-        reader.readAsDataURL(outputBlob);
-      });
-    }
-
-    updateNodeData(node.id, {
-      outputVideo,
-      status: "complete",
-      progress: 100,
-      error: null,
-    });
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : "Stitch failed";
-    updateNodeData(node.id, {
-      status: "error",
-      error: errorMessage,
-      progress: 0,
-    });
-    throw err instanceof Error ? err : new Error(errorMessage);
-  }
-}
 
 /**
  * EaseCurve: applies speed curve to a video input.

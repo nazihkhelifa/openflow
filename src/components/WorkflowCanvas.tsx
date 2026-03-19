@@ -31,7 +31,6 @@ import {
   Generate3DNode,
   GenerateAudioNode,
   ImageCompareNode,
-  VideoStitchNode,
   EaseCurveNode,
   VideoFrameGrabNode,
   RouterNode,
@@ -75,7 +74,6 @@ const nodeTypes: NodeTypes = {
   generate3d: Generate3DNode,
   generateAudio: GenerateAudioNode,
   imageCompare: ImageCompareNode,
-  videoStitch: VideoStitchNode,
   easeCurve: EaseCurveNode,
   videoFrameGrab: VideoFrameGrabNode,
   router: RouterNode,
@@ -137,8 +135,6 @@ const getNodeHandles = (nodeType: string): { inputs: string[]; outputs: string[]
       return { inputs: ["text"], outputs: ["audio"] };
     case "imageCompare":
       return { inputs: ["image", "image-1"], outputs: [] };
-    case "videoStitch":
-      return { inputs: ["video", "audio"], outputs: ["video"] };
     case "easeCurve":
       return { inputs: ["video", "easeCurve"], outputs: ["video", "easeCurve"] };
     case "videoFrameGrab":
@@ -350,7 +346,6 @@ export function WorkflowCanvas() {
     generate3d: 'Generate 3D',
     generateAudio: 'Generate Audio',
     imageCompare: 'Image Compare',
-    videoStitch: 'Video Stitch',
     easeCurve: 'Ease Curve',
     videoFrameGrab: 'Frame Grab',
     router: 'Router',
@@ -494,13 +489,13 @@ export function WorkflowCanvas() {
       if (sourceType === "video") {
         // Video source can ONLY connect to:
         // 1. generateVideo nodes (for video-to-video)
-        // 2. videoStitch nodes (for concatenation)
+        // 2. easeCurve / videoFrameGrab / router (processing or passthrough)
         // 3. output nodes (for display)
         const targetNode = nodes.find((n) => n.id === connection.target);
         if (!targetNode) return false;
 
         const targetNodeType = targetNode.type;
-        if (targetNodeType === "generateVideo" || targetNodeType === "videoStitch" || targetNodeType === "easeCurve" || targetNodeType === "videoFrameGrab" || targetNodeType === "router") {
+        if (targetNodeType === "generateVideo" || targetNodeType === "easeCurve" || targetNodeType === "videoFrameGrab" || targetNodeType === "router") {
           return true;
         }
         // Video cannot connect to other node types
@@ -611,21 +606,6 @@ export function WorkflowCanvas() {
             resolved = resolveRouterHandle(resolved);
             resolved = resolveRouterSourceHandle(resolved);
             resolved = resolveSwitchHandle(resolved);
-            // Resolve videoStitch handles for batch connections
-            const tgtNode = nodes.find((n) => n.id === resolved.target);
-            if (tgtNode?.type === "videoStitch" && resolved.targetHandle?.startsWith("video-")) {
-              for (let i = 0; i < 50; i++) {
-                const candidateHandle = `video-${i}`;
-                const isOccupied = edges.some(
-                  (e) => e.target === resolved.target && e.targetHandle === candidateHandle
-                ) || batchUsed.has(candidateHandle);
-                if (!isOccupied) {
-                  resolved = { ...resolved, targetHandle: candidateHandle };
-                  batchUsed.add(candidateHandle);
-                  break;
-                }
-              }
-            }
             if (resolved.targetHandle) batchUsed.add(resolved.targetHandle);
             onConnect(resolved);
             return;
@@ -645,22 +625,6 @@ export function WorkflowCanvas() {
             target: connection.target,
             targetHandle: connection.targetHandle,
           };
-
-          // Resolve videoStitch handle for batch connections
-          const targetNode = nodes.find((n) => n.id === multiConnection.target);
-          if (targetNode?.type === "videoStitch" && multiConnection.targetHandle?.startsWith("video-")) {
-            for (let i = 0; i < 50; i++) {
-              const candidateHandle = `video-${i}`;
-              const isOccupied = edges.some(
-                (e) => e.target === multiConnection.target && e.targetHandle === candidateHandle
-              ) || batchUsed.has(candidateHandle);
-              if (!isOccupied) {
-                multiConnection = { ...multiConnection, targetHandle: candidateHandle };
-                batchUsed.add(candidateHandle);
-                break;
-              }
-            }
-          }
 
           let resolved = resolveImageCompareHandle(multiConnection, batchUsed);
           resolved = resolveRouterHandle(resolved);
@@ -742,18 +706,6 @@ export function WorkflowCanvas() {
           if (handleType === "video") return "video";
           if (handleType === "3d") return "3d";
           return handleType === "image" ? "image" : null;
-        }
-
-        // VideoStitch has dynamic indexed video input handles (video-0, video-1, ...)
-        if (node.type === "videoStitch" && needInput && handleType === "video") {
-          for (let i = 0; i < 50; i++) {
-            const candidateHandle = `video-${i}`;
-            const isOccupied = edges.some(
-              (edge) => edge.target === node.id && edge.targetHandle === candidateHandle
-            ) || batchUsed?.has(candidateHandle);
-            if (!isOccupied) return candidateHandle;
-          }
-          return null;
         }
 
         // Router accepts any type — use typed handle if exists, otherwise generic
@@ -1085,11 +1037,7 @@ export function WorkflowCanvas() {
           }
         }
       } else if (handleType === "video") {
-        if (nodeType === "videoStitch") {
-          // VideoStitch has dynamic video-N inputs and a video output
-          targetHandleId = "video-0";
-          sourceHandleIdForNewNode = "video";
-        } else if (nodeType === "easeCurve") {
+        if (nodeType === "easeCurve") {
           // EaseCurve accepts video input and outputs video
           targetHandleId = "video";
           sourceHandleIdForNewNode = "video";
@@ -1109,9 +1057,6 @@ export function WorkflowCanvas() {
         } else if (nodeType === "generateAudio") {
           // GenerateAudio outputs audio (no audio input to wire to)
           sourceHandleIdForNewNode = "audio";
-        } else if (nodeType === "videoStitch") {
-          // VideoStitch accepts audio
-          targetHandleId = "audio";
         }
       } else if (handleType === "3d") {
         if (nodeType === "glbViewer" || nodeType === "mediaInput") {
@@ -1141,16 +1086,6 @@ export function WorkflowCanvas() {
             let resolvedTargetHandle = targetHandleId;
             if (nodeType === "imageCompare" && targetHandleId === "image" && batchUsed.has("image")) {
               resolvedTargetHandle = "image-1";
-            }
-            // For videoStitch, find next available video-N handle
-            if (nodeType === "videoStitch" && targetHandleId.startsWith("video-")) {
-              for (let i = 0; i < 50; i++) {
-                const candidateHandle = `video-${i}`;
-                if (!batchUsed.has(candidateHandle)) {
-                  resolvedTargetHandle = candidateHandle;
-                  break;
-                }
-              }
             }
             batchUsed.add(resolvedTargetHandle);
 

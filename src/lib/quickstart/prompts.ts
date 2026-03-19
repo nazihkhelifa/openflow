@@ -10,7 +10,7 @@ export function buildQuickstartSystemInstruction(): string {
 CRITICAL:
 - OUTPUT MUST BE ONLY VALID JSON (no markdown, no explanations).
 - nodes[].type MUST be one of the supported node types:
-  mediaInput, imageInput, audioInput, annotation, prompt, generateImage, generateVideo, generate3d, generateAudio, imageCompare, videoStitch, easeCurve, videoFrameGrab, router, switch, conditionalSwitch, glbViewer
+  mediaInput, imageInput, audioInput, annotation, prompt, generateImage, generateVideo, generate3d, generateAudio, imageCompare, easeCurve, videoFrameGrab, router, switch, conditionalSwitch, glbViewer
 - Do NOT use legacy node types like "nanoBanana" or "output".
 - Every edge must use allowed handle types: "image", "text", "audio", "video", "easeCurve", "3d", and the special "reference".
 - Handle matching rule (except "reference"): connect image→image, text→text, audio→audio, video→video, 3d→3d, easeCurve→easeCurve.
@@ -26,7 +26,6 @@ Node capabilities (high-level):
 - generate3d: image + text → 3d (and typically an image preview).
 - generateAudio: text → audio.
 - imageCompare: image + image → image.
-- videoStitch: video (+audio) → video.
 - easeCurve: curve-related routing; uses video and outputs/consumes "easeCurve".
 - videoFrameGrab: video → image.
 - router/switch/conditionalSwitch: routing nodes; use "text" inputs to decide which outputs should be connected.
@@ -54,7 +53,7 @@ You MUST output ONLY valid JSON. No explanations, no markdown, no code blocks. J
 
 ## CRITICAL: NODE TYPES (CURRENT)
 Only use node.type values that are supported by the editor:
-mediaInput, imageInput, audioInput, annotation, prompt, generateImage, generateVideo, generate3d, generateAudio, imageCompare, videoStitch, easeCurve, videoFrameGrab, router, switch, conditionalSwitch, glbViewer
+mediaInput, imageInput, audioInput, annotation, prompt, generateImage, generateVideo, generate3d, generateAudio, imageCompare, easeCurve, videoFrameGrab, router, switch, conditionalSwitch, glbViewer
 Do NOT use legacy node types like "nanoBanana" or "output".
 
 ## Available Node Types

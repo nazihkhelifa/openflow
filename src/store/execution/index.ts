@@ -30,8 +30,4 @@ export type { Generate3DOptions } from "./generate3dExecutor";
 export { executeGenerateAudio } from "./generateAudioExecutor";
 export type { GenerateAudioOptions } from "./generateAudioExecutor";
 
-export {
-  executeVideoStitch,
-  executeEaseCurve,
-  executeVideoFrameGrab,
-} from "./videoProcessingExecutors";
+export { executeEaseCurve, executeVideoFrameGrab } from "./videoProcessingExecutors";

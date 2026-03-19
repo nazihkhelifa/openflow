@@ -17,7 +17,6 @@ export const FLOWY_PLANNER_NODE_TYPES = [
   "generateVideo",
   "generateAudio",
   "imageCompare",
-  "videoStitch",
   "easeCurve",
   "videoFrameGrab",
   "router",

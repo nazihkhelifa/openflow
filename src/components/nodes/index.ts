@@ -28,7 +28,6 @@ export { AnnotationNode } from "./process/AnnotationNode";
 export { ImageCompareNode } from "./process/ImageCompareNode";
 
 // Video nodes
-export { VideoStitchNode } from "./video/VideoStitchNode";
 export { EaseCurveNode } from "./video/EaseCurveNode";
 export { VideoFrameGrabNode } from "./video/VideoFrameGrabNode";
 

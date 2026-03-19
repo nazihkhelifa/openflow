@@ -29,7 +29,6 @@ export const ALL_NODES_CATEGORIES: {
     label: "Process",
     nodes: [
       { type: "annotation", label: "Layer Editor" },
-      { type: "videoStitch", label: "Video Stitch" },
       { type: "easeCurve", label: "Ease Curve" },
       { type: "videoFrameGrab", label: "Frame Grab" },
       { type: "imageCompare", label: "Image Compare" },

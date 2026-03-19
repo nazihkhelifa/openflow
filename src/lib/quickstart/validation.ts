@@ -23,7 +23,6 @@ const VALID_NODE_TYPES: NodeType[] = [
   "generate3d",
   "generateAudio",
   "imageCompare",
-  "videoStitch",
   "easeCurve",
   "videoFrameGrab",
   "router",
@@ -46,7 +45,6 @@ const DEFAULT_DIMENSIONS: Record<NodeType, { width: number; height: number }> = 
   generate3d: { width: SQUARE_SIZE, height: SQUARE_SIZE },
   generateAudio: { width: 300, height: 280 },
   imageCompare: { width: 400, height: 360 },
-  videoStitch: { width: SQUARE_SIZE, height: SQUARE_SIZE },
   easeCurve: { width: SQUARE_SIZE, height: SQUARE_SIZE },
   videoFrameGrab: { width: SQUARE_SIZE, height: SQUARE_SIZE },
   router: { width: 200, height: 80 },
@@ -307,17 +305,6 @@ function createDefaultNodeData(type: NodeType): WorkflowNodeData {
       return {
         imageA: null,
         imageB: null,
-      };
-    case "videoStitch":
-      return {
-        clips: [],
-        clipOrder: [],
-        outputVideo: null,
-        loopCount: 1,
-        status: "idle",
-        error: null,
-        progress: 0,
-        encoderSupported: null,
       };
     case "easeCurve":
       return {
