@@ -71,6 +71,8 @@ export function GenerateImageToolbar({ nodeId }: GenerateImageToolbarProps) {
   const nodes = useWorkflowStore((state) => state.nodes);
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsRef = useRef<HTMLDivElement | null>(null);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const modelMenuRef = useRef<HTMLDivElement | null>(null);
 
   const data = node?.data as NanoBananaNodeData | undefined;
   const hasImage = !!data?.outputImage;
@@ -124,17 +126,19 @@ export function GenerateImageToolbar({ nodeId }: GenerateImageToolbarProps) {
   };
 
   useEffect(() => {
-    if (!toolsOpen) return;
+    if (!toolsOpen && !modelMenuOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (!toolsRef.current) return;
-      if (toolsRef.current.contains(event.target as Node)) return;
+      const target = event.target as Node;
+      if (toolsRef.current?.contains(target)) return;
+      if (modelMenuRef.current?.contains(target)) return;
       setToolsOpen(false);
+      setModelMenuOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [toolsOpen]);
+  }, [toolsOpen, modelMenuOpen]);
 
   // Default image models from settings (same source as ControlPanel)
   const { defaultImageModels, defaultModelIndex } = useMemo(() => {
@@ -251,21 +255,6 @@ export function GenerateImageToolbar({ nodeId }: GenerateImageToolbarProps) {
   const stopProp = (e: React.MouseEvent | React.PointerEvent) =>
     e.stopPropagation();
 
-  const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const nextModel = e.target.value as ModelType;
-    // mirror GenerateImageNode behaviour
-    updateNodeData(nodeId, { model: nextModel });
-    saveNanoBananaDefaults({ model: nextModel });
-
-    const newSelectedModel: SelectedModel = {
-      provider: "gemini",
-      modelId: nextModel,
-      displayName:
-        GEMINI_IMAGE_MODELS.find((m) => m.value === nextModel)?.label ||
-        nextModel,
-    };
-    updateNodeData(nodeId, { selectedModel: newSelectedModel });
-  };
 
   const handleAspectRatioChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const aspectRatio = e.target.value as AspectRatio;
@@ -279,9 +268,8 @@ export function GenerateImageToolbar({ nodeId }: GenerateImageToolbarProps) {
     saveNanoBananaDefaults({ resolution });
   };
 
-  const handleDefaultModelSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const idx = parseInt(e.target.value, 10);
-    if (Number.isNaN(idx) || !defaultImageModels[idx]) return;
+  const handleDefaultModelSelectByIndex = (idx: number) => {
+    if (!defaultImageModels[idx]) return;
     const m = defaultImageModels[idx];
     updateNodeData(nodeId, {
       selectedModel: {
@@ -291,6 +279,21 @@ export function GenerateImageToolbar({ nodeId }: GenerateImageToolbarProps) {
       },
       parameters: {},
     });
+    setModelMenuOpen(false);
+  };
+
+  const handleGeminiModelSelect = (nextModel: ModelType) => {
+    updateNodeData(nodeId, { model: nextModel });
+    saveNanoBananaDefaults({ model: nextModel });
+    const newSelectedModel: SelectedModel = {
+      provider: "gemini",
+      modelId: nextModel,
+      displayName:
+        GEMINI_IMAGE_MODELS.find((m) => m.value === nextModel)?.label ||
+        nextModel,
+    };
+    updateNodeData(nodeId, { selectedModel: newSelectedModel });
+    setModelMenuOpen(false);
   };
 
   const handleUseDefault = () => {
@@ -336,40 +339,70 @@ export function GenerateImageToolbar({ nodeId }: GenerateImageToolbarProps) {
           {/* Provider + model (defaults from settings, including external like Flux 2) */}
           <div className="flex items-center gap-1 max-w-[180px]">
             <ProviderBadge provider={provider} />
-            {defaultImageModels.length > 0 ? (
-              <select
-                value={currentDefaultIndex}
-                onChange={handleDefaultModelSelect}
-                className="nodrag nopan max-w-[140px] truncate bg-transparent text-neutral-100 text-[11px] focus:outline-none"
-                title={
-                  data.selectedModel?.displayName ||
-                  modelLabel ||
-                  "Select model"
-                }
-              >
-                <option value="">
-                  {data.selectedModel?.displayName ||
+            {defaultImageModels.length > 0 || provider === "gemini" ? (
+              <div ref={modelMenuRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setModelMenuOpen((open) => !open)}
+                  className="nodrag nopan inline-flex max-w-[140px] items-center gap-1 rounded-lg px-1.5 py-0.5 text-left text-neutral-100 hover:bg-white/5"
+                  title={
+                    data.selectedModel?.displayName ||
                     modelLabel ||
-                    "Select model"}
-                </option>
-                {defaultImageModels.map((m: any, i: number) => (
-                  <option key={i} value={i}>
-                    {getProviderDisplayName(m.provider)}: {m.displayName}
-                  </option>
-                ))}
-              </select>
-            ) : provider === "gemini" ? (
-              <select
-                value={modelId ?? "nano-banana-pro"}
-                onChange={handleModelChange}
-                className="nodrag nopan max-w-[140px] truncate bg-transparent text-neutral-100 text-[11px] focus:outline-none"
-              >
-                {GEMINI_IMAGE_MODELS.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
+                    "Select model"
+                  }
+                >
+                  <span className="truncate">
+                    {data.selectedModel?.displayName || modelLabel || "Select model"}
+                  </span>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className={`shrink-0 text-neutral-400 transition-transform ${modelMenuOpen ? "rotate-180" : ""}`}
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+                {modelMenuOpen && (
+                  <div className="absolute left-0 top-full mt-1 z-50 flex min-w-52 flex-col overflow-hidden rounded-2xl border border-neutral-700 bg-neutral-900/95 p-1 text-[11px] text-neutral-100 shadow-xl backdrop-blur-lg">
+                    {defaultImageModels.length > 0
+                      ? defaultImageModels.map((m: any, i: number) => {
+                          const isActive = String(i) === currentDefaultIndex;
+                          return (
+                            <button
+                              key={`${m.provider}-${m.modelId}-${i}`}
+                              type="button"
+                              onClick={() => handleDefaultModelSelectByIndex(i)}
+                              className={`relative flex h-10 cursor-pointer select-none items-center rounded-xl p-2 text-left outline-none ${isActive ? "bg-white/10" : "hover:bg-white/5"}`}
+                            >
+                              <span className="truncate">
+                                {getProviderDisplayName(m.provider)}: {m.displayName}
+                              </span>
+                            </button>
+                          );
+                        })
+                      : GEMINI_IMAGE_MODELS.map((m) => {
+                          const isActive = (modelId ?? "nano-banana-pro") === m.value;
+                          return (
+                            <button
+                              key={m.value}
+                              type="button"
+                              onClick={() => handleGeminiModelSelect(m.value)}
+                              className={`relative flex h-10 cursor-pointer select-none items-center rounded-xl p-2 text-left outline-none ${isActive ? "bg-white/10" : "hover:bg-white/5"}`}
+                            >
+                              <span className="truncate">{m.label}</span>
+                            </button>
+                          );
+                        })}
+                  </div>
+                )}
+              </div>
             ) : (
               <span className="truncate text-neutral-100">{modelLabel}</span>
             )}

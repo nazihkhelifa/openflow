@@ -89,8 +89,8 @@ export function PromptNodeToolbar({ nodeId, data }: PromptNodeToolbarProps) {
               <ChevronDown className="size-3 opacity-50" />
             </button>
             {showProviderDropdown && (
-              <div className="absolute left-0 top-full mt-1 z-[1001] min-w-[8rem] rounded-md border border-neutral-600 bg-neutral-800 shadow-xl overflow-hidden" onMouseDown={stopProp} onPointerDown={stopProp}>
-                <div className="p-1">
+              <div className="absolute left-0 top-full mt-1 z-[1001] flex min-w-52 flex-col overflow-hidden rounded-2xl border border-neutral-700 bg-neutral-900/95 p-1 text-[11px] text-neutral-100 shadow-xl backdrop-blur-lg" onMouseDown={stopProp} onPointerDown={stopProp}>
+                <div className="flex flex-col">
                   {LLM_PROVIDERS.map((prov) => (
                     <button
                       key={prov.value}
@@ -105,8 +105,8 @@ export function PromptNodeToolbar({ nodeId, data }: PromptNodeToolbarProps) {
                         updateNodeData(nodeId, { provider: prov.value, model: firstModel ?? "gemini-2.5-flash" });
                         setShowProviderDropdown(false);
                       }}
-                      className={`nodrag nopan w-full px-2 py-1.5 text-left text-xs rounded hover:bg-neutral-700 ${
-                        provider === prov.value ? "bg-neutral-700 text-white" : "text-neutral-200"
+                      className={`nodrag nopan relative flex h-10 w-full select-none items-center rounded-xl p-2 text-left outline-none ${
+                        provider === prov.value ? "bg-white/10 text-white" : "text-neutral-200 hover:bg-white/5"
                       }`}
                     >
                       {prov.label}
@@ -135,8 +135,8 @@ export function PromptNodeToolbar({ nodeId, data }: PromptNodeToolbarProps) {
               <ChevronDown className="size-3 opacity-50" />
             </button>
             {showModelDropdown && (
-              <div className="absolute left-0 top-full mt-1 z-[1001] min-w-[10rem] rounded-md border border-neutral-600 bg-neutral-800 shadow-xl overflow-hidden" onMouseDown={stopProp} onPointerDown={stopProp}>
-                <div className="p-1">
+              <div className="absolute left-0 top-full mt-1 z-[1001] flex min-w-52 flex-col overflow-hidden rounded-2xl border border-neutral-700 bg-neutral-900/95 p-1 text-[11px] text-neutral-100 shadow-xl backdrop-blur-lg" onMouseDown={stopProp} onPointerDown={stopProp}>
+                <div className="flex flex-col">
                   {availableModels.map((m) => (
                     <button
                       key={m.value}
@@ -150,8 +150,8 @@ export function PromptNodeToolbar({ nodeId, data }: PromptNodeToolbarProps) {
                         updateNodeData(nodeId, { model: m.value });
                         setShowModelDropdown(false);
                       }}
-                      className={`nodrag nopan w-full px-2 py-1.5 text-left text-xs rounded hover:bg-neutral-700 ${
-                        model === m.value ? "bg-neutral-700 text-white" : "text-neutral-200"
+                      className={`nodrag nopan relative flex h-10 w-full select-none items-center rounded-xl p-2 text-left outline-none ${
+                        model === m.value ? "bg-white/10 text-white" : "text-neutral-200 hover:bg-white/5"
                       }`}
                     >
                       {m.label}
