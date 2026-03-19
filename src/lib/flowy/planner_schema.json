@@ -1,0 +1,40 @@
+{
+  "$comment": "Single source for Flowy planner allowlists. Python loads this file; TS tests keep it aligned with NodeType.",
+  "nodeTypes": [
+    "mediaInput",
+    "imageInput",
+    "audioInput",
+    "annotation",
+    "comment",
+    "prompt",
+    "generateImage",
+    "generateVideo",
+    "generateAudio",
+    "imageCompare",
+    "videoStitch",
+    "easeCurve",
+    "videoTrim",
+    "videoFrameGrab",
+    "router",
+    "switch",
+    "conditionalSwitch",
+    "generate3d",
+    "glbViewer"
+  ],
+  "handleTypes": [
+    "image",
+    "text",
+    "audio",
+    "video",
+    "3d",
+    "easeCurve",
+    "reference"
+  ],
+  "operationTypes": [
+    "addNode",
+    "removeNode",
+    "updateNode",
+    "addEdge",
+    "removeEdge"
+  ]
+}

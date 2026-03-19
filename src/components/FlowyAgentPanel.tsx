@@ -9,6 +9,7 @@ type WorkflowState = {
     id: string;
     type: string;
     position: { x: number; y: number };
+    groupId?: string;
     data: Record<string, unknown>;
   }>;
   edges: Array<{
@@ -18,6 +19,17 @@ type WorkflowState = {
     sourceHandle?: string;
     targetHandle?: string;
   }>;
+  /** Optional canvas groups (aligned with workflow file / store) */
+  groups?: Record<
+    string,
+    {
+      name: string;
+      color?: string;
+      locked?: boolean;
+      position?: { x: number; y: number };
+      size?: { width: number; height: number };
+    }
+  >;
 };
 
 type FlowyPlanResponse = {
@@ -80,6 +92,9 @@ export function FlowyAgentPanel({
     return {
       nodes: workflowState.nodes,
       edges: workflowState.edges,
+      ...(workflowState.groups && Object.keys(workflowState.groups).length > 0
+        ? { groups: workflowState.groups }
+        : {}),
     };
   }, [workflowState]);
 

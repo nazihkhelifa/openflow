@@ -1,42 +1,32 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import functools
 import json
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from langchain_core.messages import HumanMessage, SystemMessage  # type: ignore
 from langchain_openai import ChatOpenAI  # type: ignore
+
+from canvas_context import build_canvas_context_for_llm, load_planner_schema
 
 
 FLOWY_DEEPAGENTS_DIR = os.path.join(os.path.dirname(__file__), "")
 
 
-ALLOWED_NODE_TYPES = {
-    "mediaInput",
-    "imageInput",
-    "audioInput",
-    "annotation",
-    "comment",
-    "prompt",
-    "generateImage",
-    "generateVideo",
-    "generateAudio",
-    "imageCompare",
-    "videoStitch",
-    "easeCurve",
-    "videoTrim",
-    "videoFrameGrab",
-    "router",
-    "switch",
-    "conditionalSwitch",
-    "generate3d",
-    "glbViewer",
-}
-
-ALLOWED_HANDLE_TYPES = {"image", "text", "audio", "video", "3d", "easeCurve", "reference"}
-ALLOWED_OPERATION_TYPES = {"addNode", "removeNode", "updateNode", "addEdge", "removeEdge"}
+@functools.lru_cache(maxsize=1)
+def _planner_allowlists() -> Tuple[Set[str], Set[str], Set[str]]:
+    """Allowlists from src/lib/flowy/planner_schema.json (repo root relative)."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    schema = load_planner_schema(script_dir)
+    nodes = set(str(x) for x in (schema.get("nodeTypes") or []))
+    handles = set(str(x) for x in (schema.get("handleTypes") or []))
+    ops = set(str(x) for x in (schema.get("operationTypes") or []))
+    if not nodes or not handles or not ops:
+        raise ValueError("planner_schema.json missing nodeTypes, handleTypes, or operationTypes")
+    return nodes, handles, ops
 
 
 def _read_stdin_json() -> Dict[str, Any]:
@@ -63,11 +53,12 @@ def _safe_extract_first_json_object(text: str) -> Dict[str, Any]:
 
 
 def _validate_edge_handles(source_handle: Optional[str], target_handle: Optional[str]) -> Optional[str]:
+    allowed_handles = _planner_allowlists()[1]
     if not source_handle and not target_handle:
         return "Edge handles must be provided (sourceHandle and targetHandle)."
-    if source_handle not in ALLOWED_HANDLE_TYPES:
+    if source_handle not in allowed_handles:
         return f"Invalid sourceHandle '{source_handle}'."
-    if target_handle not in ALLOWED_HANDLE_TYPES:
+    if target_handle not in allowed_handles:
         return f"Invalid targetHandle '{target_handle}'."
 
     # Matching rule (except 'reference'): connect handle types by equality.
@@ -80,6 +71,7 @@ def _validate_edge_handles(source_handle: Optional[str], target_handle: Optional
 
 def _validate_edit_operations(operations: List[Dict[str, Any]], workflow_state: Dict[str, Any]) -> Dict[str, Any]:
     errors: List[str] = []
+    allowed_nodes, _handles, allowed_ops = _planner_allowlists()
 
     if not isinstance(operations, list):
         return {"ok": False, "errors": ["operations must be a list"]}
@@ -105,14 +97,14 @@ def _validate_edit_operations(operations: List[Dict[str, Any]], workflow_state: 
             continue
 
         op_type = op.get("type")
-        if op_type not in ALLOWED_OPERATION_TYPES:
+        if op_type not in allowed_ops:
             errors.append(f"operations[{idx}].type invalid: {op_type}")
             continue
 
         if op_type == "addNode":
             node_type = op.get("nodeType")
             node_id = op.get("nodeId")
-            if node_type not in ALLOWED_NODE_TYPES:
+            if node_type not in allowed_nodes:
                 errors.append(f"operations[{idx}].nodeType invalid: {node_type}")
             if not node_id or not isinstance(node_id, str):
                 errors.append(f"operations[{idx}].nodeId is required for subsequent ops (missing).")
@@ -171,14 +163,28 @@ def _build_system_prompt() -> str:
 
 
 def _build_user_prompt(message: str, workflow_state: Dict[str, Any], selected_node_ids: List[str]) -> str:
-    context_preview = {
-        "selectedNodeIds": selected_node_ids,
-        "nodeCount": len(workflow_state.get("nodes") or []),
-        "edgeCount": len(workflow_state.get("edges") or []),
-    }
+    try:
+        hops = int(os.environ.get("FLOWY_CONTEXT_NEIGHBOR_HOPS", "2"))
+    except ValueError:
+        hops = 2
+    try:
+        focus_max = int(os.environ.get("FLOWY_CONTEXT_FOCUS_MAX_NODES", "72"))
+    except ValueError:
+        focus_max = 72
+
+    canvas_ctx = build_canvas_context_for_llm(
+        workflow_state,
+        selected_node_ids=selected_node_ids,
+        neighbor_hops=hops,
+        focus_max_nodes=focus_max,
+    )
+    canvas_json = json.dumps(canvas_ctx, ensure_ascii=False, indent=2)
+
     return (
         f"Message: {message}\n\n"
-        f"Canvas summary: {context_preview}\n\n"
+        "Current workflow (JSON). Use nodesDetailed for full context near the user's selection; "
+        "nodesOutline lists other nodes by id/type only; edges are the full graph.\n"
+        f"{canvas_json}\n\n"
         "Return the planned edit operations as a single JSON object."
     )
 

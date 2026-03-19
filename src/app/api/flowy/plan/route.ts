@@ -1,22 +1,31 @@
 import { NextResponse } from "next/server";
 import { spawn } from "child_process";
 import path from "path";
+import { existsSync } from "fs";
 import { loadWorkflowFromFileProject, isFileProjectId } from "@/lib/projectFileIO";
 
 export const runtime = "nodejs";
 
 type PlanRequest = {
   message: string;
-  workflowState?: { nodes: any[]; edges: any[] };
+  workflowState?: { nodes: any[]; edges: any[]; groups?: Record<string, unknown> };
   selectedNodeIds?: string[];
   projectId?: string;
   provider?: string;
   model?: string;
 };
 
+function resolvePythonExecutable(repoRoot: string): string {
+  const winVenv = path.join(repoRoot, "backend", ".venv", "Scripts", "python.exe");
+  const posixVenv = path.join(repoRoot, "backend", ".venv", "bin", "python");
+  if (existsSync(winVenv)) return winVenv;
+  if (existsSync(posixVenv)) return posixVenv;
+  return process.platform === "win32" ? "python" : "python3";
+}
+
 function runFlowyPlanner(payload: PlanRequest): Promise<any> {
   const repoRoot = process.cwd();
-  const pythonPath = path.join(repoRoot, "backend", ".venv", "Scripts", "python.exe");
+  const pythonPath = resolvePythonExecutable(repoRoot);
   const deepScriptPath = path.join(repoRoot, "backend", "flowy_deepagents", "content_writer.py");
 
   return new Promise((resolve, reject) => {
@@ -87,6 +96,7 @@ export async function POST(request: Request) {
       workflowState = {
         nodes: loaded.workflow?.nodes ?? [],
         edges: loaded.workflow?.edges ?? [],
+        groups: loaded.workflow?.groups ?? {},
       };
     }
 

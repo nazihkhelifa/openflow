@@ -32,7 +32,13 @@ Each operation MUST be one of:
   `mediaInput`, `imageInput`, `audioInput`, `annotation`, `comment`, `prompt`, `generateImage`, `generateVideo`, `generateAudio`, `imageCompare`, `videoStitch`, `easeCurve`, `videoTrim`, `videoFrameGrab`, `router`, `switch`, `conditionalSwitch`, `generate3d`, `glbViewer`.
 
 ## What to do
-- Read the user's message and the provided `Canvas summary`.
+- Read the user's message and the **Current workflow** JSON in the user prompt:
+  - `nodesDetailed`: full sanitized `data` for nodes near the user's selection (and graph neighbors).
+  - `nodesOutline`: other nodes as `{ id, type, groupId? }` only.
+  - `edges`: the **complete** edge list (source/target + handles).
+  - `groups`: group metadata when present.
+  - `summary`: counts, `selectedNodeIds`, and `focusNodeIds`.
+- Prefer editing **existing** nodes (by `id`) when the user refers to the current graph.
 - Plan a minimal set of operations to satisfy the request.
 - If the user asks to "clear" or "reset" the canvas, output operations that remove all nodes.
 

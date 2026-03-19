@@ -8,8 +8,7 @@ description: Plan and return edit operations for the workflow canvas from the us
 ## Job
 Given:
 - `Message` (what the user wants),
-- `Canvas summary` (current nodes/edges counts + selected node ids),
-- and optional `selectedNodeIds`,
+- **Current workflow** JSON (nodesDetailed, nodesOutline, edges, groups, summary with selected/focus ids),
 
 Produce a JSON-only response with (JSON object only, no markdown, no code fences):
 - `assistantText`: a short explanation of what you plan to do

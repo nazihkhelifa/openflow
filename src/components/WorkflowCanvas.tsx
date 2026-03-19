@@ -940,11 +940,14 @@ export function WorkflowCanvas() {
   // Create lightweight workflow state for chat (strip base64 images)
   const chatWorkflowState = useMemo(() => {
     const strippedNodes = stripBinaryData(nodes);
+    const groupIdByNodeId = new Map(nodes.map((n) => [n.id, n.groupId]));
+    const groupEntries = Object.entries(groups ?? {});
     return {
-      nodes: strippedNodes.map(n => ({
+      nodes: strippedNodes.map((n) => ({
         id: n.id,
         type: n.type,
         position: n.position,
+        groupId: groupIdByNodeId.get(n.id),
         data: n.data,
       })),
       edges: edges.map(e => ({
@@ -954,8 +957,24 @@ export function WorkflowCanvas() {
         sourceHandle: e.sourceHandle || undefined,
         targetHandle: e.targetHandle || undefined,
       })),
+      ...(groupEntries.length > 0
+        ? {
+            groups: Object.fromEntries(
+              groupEntries.map(([id, g]) => [
+                id,
+                {
+                  name: g.name,
+                  color: g.color,
+                  locked: g.locked,
+                  position: g.position,
+                  size: g.size,
+                },
+              ])
+            ),
+          }
+        : {}),
     };
-  }, [nodes, edges]);
+  }, [nodes, edges, groups]);
 
   // Compute selected node IDs for chat context scoping
   const selectedNodeIds = useMemo(() => nodes.filter(n => n.selected).map(n => n.id), [nodes]);

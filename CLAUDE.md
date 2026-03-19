@@ -149,6 +149,7 @@ Returns `{ images: string[], text: string | null }`.
 9. Update `getConnectedInputs()` if the node produces consumable output
 10. Add execution logic in `executeWorkflow()` if the node requires processing
 11. Update `ConnectionDropMenu.tsx` to include the node in source/target lists
+12. **Flowy planner:** add the type to `src/lib/flowy/plannerAllowlist.ts` (exhaustive `NodeType` check) and to `src/lib/flowy/planner_schema.json` (`nodeTypes`). Python `backend/flowy_deepagents/content_writer.py` loads the JSON for validation.
 
 ### Handle Naming Convention
 
@@ -160,6 +161,12 @@ Use descriptive handle IDs matching the data type:
 
 - Connection validation: `isValidConnection()` in `WorkflowCanvas.tsx`
 - Workflow validation: `validateWorkflow()` in `workflowStore.ts`
+
+## Flowy planner (canvas agent)
+
+- **API:** `POST /api/flowy/plan` spawns `backend/flowy_deepagents/content_writer.py` (OpenAI JSON mode).
+- **Allowlists:** `src/lib/flowy/planner_schema.json` — keep aligned with `src/lib/flowy/plannerAllowlist.ts` (run `npm run test:run -- src/lib/flowy/plannerSchema.test.ts`).
+- **Context:** The planner receives the full **edge list**, **group** metadata, and **nodesDetailed** (sanitized `data` near selection + graph neighbors) plus **nodesOutline** for other nodes. Tune with `FLOWY_MAX_CANVAS_CONTEXT_CHARS`, `FLOWY_CONTEXT_NEIGHBOR_HOPS`, `FLOWY_CONTEXT_FOCUS_MAX_NODES`.
 
 ## Adding New Kie.ai Models (SOP)
 
