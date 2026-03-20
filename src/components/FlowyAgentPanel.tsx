@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { EditOperation } from "@/lib/chat/editOperations";
 import {
   AtSign,
@@ -160,7 +161,7 @@ export function FlowyAgentPanel({
   const [cursor, setCursor] = useState<{ x: number; y: number; visible: boolean }>({
     x: 0,
     y: 0,
-    visible: false,
+    visible: true,
   });
   const [isExecutingStep, setIsExecutingStep] = useState(false);
   const autoRunIdRef = useRef(0);
@@ -348,7 +349,7 @@ export function FlowyAgentPanel({
           setPendingRunApprovalRequired(data.runApprovalRequired ?? true);
           autoRunCompletedRef.current = false;
         }
-        setCursor((c) => ({ ...c, visible: false }));
+        setCursor((c) => ({ ...c, visible: true }));
         updateSessionMessages(sessionId, (prev) => [
           ...prev,
           { id: `a-${Date.now()}`, role: "assistant", text: assistantText },
@@ -408,6 +409,26 @@ export function FlowyAgentPanel({
 
   const sleep = useCallback((ms: number) => new Promise((r) => setTimeout(r, ms)), []);
 
+  const getFallbackCursorScreen = useCallback((): { x: number; y: number } => {
+    return {
+      x: Math.max(120, Math.round(window.innerWidth * 0.62)),
+      y: Math.max(120, Math.round(window.innerHeight * 0.42)),
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setCursor((prev) => {
+      const needsFallback = prev.x === 0 && prev.y === 0;
+      const fallback = needsFallback ? getFallbackCursorScreen() : null;
+      return {
+        x: fallback ? fallback.x : prev.x,
+        y: fallback ? fallback.y : prev.y,
+        visible: true,
+      };
+    });
+  }, [getFallbackCursorScreen, isOpen]);
+
   const getNodeCenterScreen = useCallback((nodeId: string): { x: number; y: number } | null => {
     try {
       const el = document.querySelector(`.react-flow__node[data-id="${CSS.escape(nodeId)}"]`) as HTMLElement | null;
@@ -458,11 +479,15 @@ export function FlowyAgentPanel({
         if (op.type !== "addNode") {
           if (op.type === "removeNode" || op.type === "updateNode") {
             const center = getNodeCenterScreen(op.nodeId);
-            if (center) setCursor({ x: center.x, y: center.y, visible: true });
+            const pos = center ?? getFallbackCursorScreen();
+            setCursor({ x: pos.x, y: pos.y, visible: true });
+            await sleep(140);
           } else if (op.type === "addEdge") {
             // Move cursor to the source first (then we'll move it to target after the edge is created).
             const center = getNodeCenterScreen(op.source);
-            if (center) setCursor({ x: center.x, y: center.y, visible: true });
+            const pos = center ?? getFallbackCursorScreen();
+            setCursor({ x: pos.x, y: pos.y, visible: true });
+            await sleep(140);
           }
         }
 
@@ -472,9 +497,10 @@ export function FlowyAgentPanel({
 
           if (op.nodeId) {
             const center = getNodeCenterScreen(op.nodeId);
-            if (center) setCursor({ x: center.x, y: center.y, visible: true });
+            const pos = center ?? getFallbackCursorScreen();
+            setCursor({ x: pos.x, y: pos.y, visible: true });
             // brief settle time so the cursor motion feels "live"
-            await sleep(150);
+            await sleep(180);
           }
         } else {
           if (op.type === "updateNode" && nodeTypeById.get(op.nodeId) === "prompt") {
@@ -526,12 +552,14 @@ export function FlowyAgentPanel({
           const targetNodeId = op.type === "removeNode" || op.type === "updateNode" ? op.nodeId : undefined;
           if (targetNodeId) {
             const center = getNodeCenterScreen(targetNodeId);
-            if (center) setCursor({ x: center.x, y: center.y, visible: true });
-            await sleep(60);
+            const pos = center ?? getFallbackCursorScreen();
+            setCursor({ x: pos.x, y: pos.y, visible: true });
+            await sleep(140);
           } else if (op.type === "addEdge") {
             const t = getNodeCenterScreen(op.target);
-            if (t) setCursor({ x: t.x, y: t.y, visible: true });
-            await sleep(80);
+            const pos = t ?? getFallbackCursorScreen();
+            setCursor({ x: pos.x, y: pos.y, visible: true });
+            await sleep(160);
           }
         }
 
@@ -540,7 +568,7 @@ export function FlowyAgentPanel({
         setIsExecutingStep(false);
       }
     },
-    [getNodeCenterScreen, nodeTypeById, onApplyEdits, pendingOperations, sleep]
+    [getFallbackCursorScreen, getNodeCenterScreen, nodeTypeById, onApplyEdits, pendingOperations, sleep]
   );
 
   const handleApproveStep = useCallback(async () => {
@@ -550,7 +578,7 @@ export function FlowyAgentPanel({
   const resetExecution = useCallback(() => {
     setExecutionIndex(0);
     setIsExecutingStep(false);
-    setCursor((c) => ({ ...c, visible: false }));
+    setCursor((c) => ({ ...c, visible: true }));
   }, []);
 
   const dismissPendingPlan = useCallback(() => {
@@ -1318,25 +1346,28 @@ export function FlowyAgentPanel({
       )}
 
       {/* Cursor overlay (purely visual, no DOM clicking) */}
-      {cursor.visible && (
-        <div
-          aria-hidden="true"
-          style={{
-            position: "fixed",
-            left: cursor.x,
-            top: cursor.y,
-            transform: "translate(-50%, -50%)",
-            zIndex: 1000,
-            pointerEvents: "none",
-            transition: "left 220ms ease, top 220ms ease, opacity 220ms ease",
-            opacity: isExecutingStep ? 1 : 0.95,
-          }}
-          className="flex items-center gap-2 rounded-md border border-purple-700/60 bg-purple-900/20 backdrop-blur px-2 py-1"
-        >
-          <MousePointerClick size={18} color="#E9D5FF" />
-          <span className="text-[11px] text-purple-100 font-semibold">agent</span>
-        </div>
-      )}
+      {cursor.visible &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            aria-hidden="true"
+            style={{
+              position: "fixed",
+              left: cursor.x,
+              top: cursor.y,
+              transform: "translate(-50%, -50%)",
+              zIndex: 2147483647,
+              pointerEvents: "none",
+              transition: "left 220ms ease, top 220ms ease, opacity 220ms ease",
+              opacity: isExecutingStep ? 1 : 0.95,
+            }}
+            className="flex items-center gap-2 rounded-md border border-purple-700/70 bg-purple-900/45 shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_8px_26px_rgba(76,29,149,0.45)] backdrop-blur px-2 py-1"
+          >
+            <MousePointerClick size={18} color="#F3E8FF" />
+            <span className="text-[11px] text-purple-100 font-semibold">agent</span>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
