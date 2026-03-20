@@ -18,6 +18,7 @@ import {
   SquarePen,
   SquarePlus,
 } from "lucide-react";
+import ReactMarkdown, { type Components } from "react-markdown";
 import {
   createEmptyFlowySession,
   loadCustomInstructions,
@@ -89,6 +90,68 @@ type ChatImageAttachment = {
   name: string;
   mimeType: string;
   dataUrl: string;
+};
+
+/** Markdown in Flowy chat (user + assistant): bold, lists, code, links — no raw `**`. */
+const FLOWY_CHAT_MD_COMPONENTS: Components = {
+  p: ({ children }) => (
+    <p className="my-1.5 first:mt-0 last:mb-0 leading-[1.6]">{children}</p>
+  ),
+  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  em: ({ children }) => <em className="italic opacity-95">{children}</em>,
+  ul: ({ children }) => (
+    <ul className="my-2 list-disc space-y-0.5 pl-5">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="my-2 list-decimal space-y-0.5 pl-5">{children}</ol>
+  ),
+  li: ({ children }) => <li className="leading-snug">{children}</li>,
+  a: ({ href, children }) => (
+    <a
+      href={href}
+      className="text-sky-400 underline underline-offset-2 hover:text-sky-300"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {children}
+    </a>
+  ),
+  h1: ({ children }) => (
+    <h1 className="mb-2 mt-3 text-base font-semibold first:mt-0">{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="mb-1.5 mt-2.5 text-sm font-semibold first:mt-0">{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="mb-1 mt-2 text-sm font-medium first:mt-0">{children}</h3>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="my-2 border-l-2 border-white/20 pl-3 text-neutral-300">{children}</blockquote>
+  ),
+  hr: () => <hr className="my-3 border-white/10" />,
+  pre: ({ children }) => (
+    <pre className="my-2 overflow-x-auto rounded-lg border border-white/10 bg-black/35 p-3 text-xs leading-relaxed">
+      {children}
+    </pre>
+  ),
+  code: ({ className, children, ...props }) => {
+    const isBlock = Boolean(className?.includes("language-"));
+    if (isBlock) {
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    }
+    return (
+      <code
+        className="rounded bg-white/12 px-1 py-px font-mono text-[0.9em] text-neutral-100"
+        {...props}
+      >
+        {children}
+      </code>
+    );
+  },
 };
 
 export function FlowyAgentPanel({
@@ -952,7 +1015,9 @@ export function FlowyAgentPanel({
           m.role === "user" ? (
             <div key={m.id} className="group/message flex select-text flex-col items-end gap-2.5 px-4 py-1">
               <div className="max-w-[85%] rounded-2xl bg-white/[0.1] px-4 py-2 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] backdrop-blur-sm">
-                <p className="m-0 whitespace-pre-wrap text-sm leading-[1.5]">{m.text}</p>
+                <div className="flowy-chat-md text-sm leading-[1.5]">
+                  <ReactMarkdown components={FLOWY_CHAT_MD_COMPONENTS}>{m.text}</ReactMarkdown>
+                </div>
               </div>
               <div className="flex items-center gap-1 pr-1 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
                 <button
@@ -969,8 +1034,8 @@ export function FlowyAgentPanel({
             <div key={m.id} className="group/message flex w-full select-text flex-col gap-1 py-1">
               <div className="px-6">
                 <div className="text-sm leading-[1.4] tracking-[-0.14px] text-neutral-100">
-                  <div className="space-y-2 whitespace-normal">
-                    <p className="my-[0.35em] whitespace-pre-wrap leading-[1.6]">{m.text}</p>
+                  <div className="flowy-chat-md whitespace-normal break-words">
+                    <ReactMarkdown components={FLOWY_CHAT_MD_COMPONENTS}>{m.text}</ReactMarkdown>
                   </div>
                 </div>
               </div>
