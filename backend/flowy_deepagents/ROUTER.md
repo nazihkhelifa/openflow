@@ -37,6 +37,9 @@ Return **ONLY** a single JSON object (no markdown, no code fences).
 ## Mixed messages
 If the user both asks a question **and** requests canvas changes, choose **`canvas_edit`**. Keep `reply` short; the detailed explanation can happen in the planning step.
 
+## Ambiguous-but-actionable requests
+When intent could be either advice or action, prefer **`canvas_edit`** if the user expresses execution intent (e.g. "do it", "set it up", "create this", "apply this to my canvas"), even if details are incomplete.
+
 ## Use the workflow brief
 You receive `WorkflowBrief` JSON: counts, selected node ids, per-type counts, and a **sample** of node id/type (not the full graph). Use it to answer questions like “what nodes do I have?” — summarize honestly (e.g. total count + types), and note if the sample is partial when the graph is large.
 
