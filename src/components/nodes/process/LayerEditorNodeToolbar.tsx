@@ -4,19 +4,19 @@ import { useCallback } from "react";
 import { NodeToolbar, Position } from "@xyflow/react";
 import { Layers, Maximize2 } from "lucide-react";
 
-type AnnotationNodeToolbarProps = {
+type LayerEditorNodeToolbarProps = {
   nodeId: string;
   disabled?: boolean;
   onEditClick: () => void;
   onFullscreenClick?: () => void;
 };
 
-export function AnnotationNodeToolbar({
+export function LayerEditorNodeToolbar({
   nodeId,
   disabled = false,
   onEditClick,
   onFullscreenClick,
-}: AnnotationNodeToolbarProps) {
+}: LayerEditorNodeToolbarProps) {
   const stopProp = useCallback((e: React.SyntheticEvent) => {
     e.stopPropagation();
   }, []);
@@ -60,4 +60,7 @@ export function AnnotationNodeToolbar({
     </NodeToolbar>
   );
 }
+
+// Backward compatibility alias
+export { LayerEditorNodeToolbar as AnnotationNodeToolbar };
 

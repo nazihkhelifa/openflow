@@ -9,7 +9,7 @@ import { AnnotationNodeData } from "@/types";
 import { getConnectedInputsPure } from "@/store/utils/connectedInputs";
 import { getMediaDimensions, calculateNodeSizeForFullBleed, SQUARE_SIZE } from "@/utils/nodeDimensions";
 import { ConnectedImageThumbnails } from "../shared/ConnectedImageThumbnails";
-import { AnnotationNodeToolbar } from "./AnnotationNodeToolbar";
+import { LayerEditorNodeToolbar } from "./LayerEditorNodeToolbar";
 import { useMediaViewer } from "@/providers/media-viewer";
 
 type AnnotationNodeType = Node<AnnotationNodeData, "annotation">;
@@ -174,7 +174,7 @@ export function LayerEditorNode({ id, data, selected }: NodeProps<AnnotationNode
       contentClassName="flex-1 min-h-0 overflow-clip"
       aspectFitMedia={nodeData.outputImage}
     >
-      <AnnotationNodeToolbar
+      <LayerEditorNodeToolbar
         nodeId={id}
         disabled={!displayImage && layers.length === 0}
         onEditClick={handleEdit}
