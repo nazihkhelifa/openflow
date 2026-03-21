@@ -1805,6 +1805,68 @@ def _run_builder_stage(
     return parsed, validated_ok, last_errors, last_text_debug
 
 
+def _resolve_planner_provider_model(payload: Dict[str, Any]) -> Tuple[str, str]:
+    """Client sends `provider` (openai|google) and `model` (API model id)."""
+    prov = str(payload.get("provider") or "").strip().lower()
+    mid = str(payload.get("model") or "").strip()
+    env_default = os.environ.get("FLOWY_PLANNER_MODEL", "gpt-4.1-mini")
+    if not mid:
+        mid = env_default
+    if prov not in ("google", "openai"):
+        if "gemini" in mid.lower():
+            prov = "google"
+        else:
+            prov = "openai"
+    return prov, mid
+
+
+def _build_planner_chat_models(provider: str, model_id: str) -> Tuple[Any, Any]:
+    """
+    Main planner + router use the same model id from the Flowy panel unless
+    env overrides are needed later.
+    """
+    planner_max_tokens: Optional[int] = None
+    raw_max = os.environ.get("FLOWY_PLANNER_MAX_OUTPUT_TOKENS", "").strip()
+    if raw_max:
+        try:
+            planner_max_tokens = int(raw_max)
+        except ValueError:
+            planner_max_tokens = None
+
+    if provider == "google":
+        from langchain_google_genai import ChatGoogleGenerativeAI  # type: ignore
+
+        gkey = (os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY") or "").strip()
+        if not gkey:
+            raise ValueError(
+                "GOOGLE_API_KEY or GEMINI_API_KEY is required when using Gemini as the Flowy planner."
+            )
+        kw: Dict[str, Any] = {
+            "model": model_id,
+            "google_api_key": gkey,
+            "temperature": 0.2,
+        }
+        rkw: Dict[str, Any] = {
+            "model": model_id,
+            "google_api_key": gkey,
+            "temperature": 0.1,
+        }
+        if planner_max_tokens is not None:
+            kw["max_output_tokens"] = planner_max_tokens
+            rkw["max_output_tokens"] = planner_max_tokens
+        return ChatGoogleGenerativeAI(**kw), ChatGoogleGenerativeAI(**rkw)
+
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    if not openai_key:
+        raise ValueError("OPENAI_API_KEY is required when using OpenAI as the Flowy planner.")
+    mk: Dict[str, Any] = {"api_key": openai_key, "model": model_id, "temperature": 0.2}
+    rk: Dict[str, Any] = {"api_key": openai_key, "model": model_id, "temperature": 0.1}
+    if planner_max_tokens is not None:
+        mk["max_tokens"] = planner_max_tokens
+        rk["max_tokens"] = planner_max_tokens
+    return ChatOpenAI(**mk), ChatOpenAI(**rk)
+
+
 def main() -> None:
     try:
         payload = _read_stdin_json()
@@ -1844,14 +1906,16 @@ def main() -> None:
             default=_coerce_bool(os.environ.get("FLOWY_REQUIRE_CAUTION_APPROVAL"), default=False),
         )
 
-        openai_key = os.environ.get("OPENAI_API_KEY")
-        if not openai_key:
+        try:
+            llm_provider, llm_model_id = _resolve_planner_provider_model(payload)
+            model, router_model = _build_planner_chat_models(llm_provider, llm_model_id)
+        except ValueError as e:
             sys.stdout.write(
                 json.dumps(
                     {
                         "ok": False,
-                        "error": "OPENAI_API_KEY missing; cannot run deep planner.",
-                        "assistantText": "Deep planner unavailable (missing OPENAI_API_KEY).",
+                        "error": str(e),
+                        "assistantText": str(e),
                         "operations": [],
                         "requiresApproval": False,
                         "approvalReason": "",
@@ -1861,29 +1925,7 @@ def main() -> None:
             )
             return
 
-        planner_model_name = os.environ.get("FLOWY_PLANNER_MODEL", "gpt-4.1-mini")
-        router_model_name = os.environ.get("FLOWY_ROUTER_MODEL", planner_model_name)
-
-        planner_max_tokens: Optional[int] = None
-        raw_max = os.environ.get("FLOWY_PLANNER_MAX_OUTPUT_TOKENS", "").strip()
-        if raw_max:
-            try:
-                planner_max_tokens = int(raw_max)
-            except ValueError:
-                planner_max_tokens = None
-
-        model_kwargs: Dict[str, Any] = {"api_key": openai_key, "model": planner_model_name, "temperature": 0.2}
-        if planner_max_tokens is not None:
-            model_kwargs["max_tokens"] = planner_max_tokens
-        model = ChatOpenAI(**model_kwargs)
-
-        router_model = ChatOpenAI(
-            api_key=openai_key,
-            model=router_model_name,
-            temperature=0.1,
-        )
-
-        _emit_progress("init", f"mode={agent_mode}")
+        _emit_progress("init", f"mode={agent_mode} llm={llm_provider}:{llm_model_id}")
 
         intent_signals = _parse_user_intent_signals(router_model, message, chat_history)
 

@@ -19,6 +19,8 @@ type PlanRequest = {
   canvasStateMemory?: { previous?: unknown; current?: unknown; updatedAt?: number };
   agentMode?: "plan" | "assist";
   projectId?: string;
+  provider?: string;
+  model?: string;
   stageIndex?: number;
   decompositionStages?: Array<Record<string, unknown>>;
   runQualityCheck?: boolean;

@@ -41,20 +41,25 @@ import {
   loadEnforceCanvasControl,
   loadFlowyAgentMode,
   loadFlowyPanelSessions,
+  loadFlowyPlannerLlm,
   loadRequireCautionApproval,
   loadStyleMemory,
+  FLOWY_PLANNER_LLM_OPTIONS,
   saveCanvasStateMemory,
   saveCustomInstructions,
   saveDockedPreference,
   saveEnforceCanvasControl,
   saveFlowyAgentMode,
   saveFlowyPanelSessions,
+  saveFlowyPlannerLlm,
   saveRequireCautionApproval,
   saveStyleMemory,
   styleMemoryToPromptContext,
   updateStyleMemoryEntry,
+  flowyPlannerLlmOptionId,
   type CanvasStateMemory,
   type FlowyAgentMode,
+  type FlowyPlannerLlmChoice,
   type StoredChatSession,
   type StyleMemory,
 } from "@/lib/flowy/flowyPanelStorage";
@@ -583,13 +588,16 @@ export function FlowyAgentPanel({
   onClose,
   onApplyEdits,
   onRunNodeIds,
+  onStopWorkflow,
   workflowState,
   selectedNodeIds,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onApplyEdits?: (operations: EditOperation[]) => { applied: number; skipped: string[] };
-  onRunNodeIds?: (nodeIds: string[]) => void | Promise<void>;
+  onRunNodeIds?: (nodeIds: string[], opts?: { signal?: AbortSignal }) => void | Promise<void>;
+  /** Stops in-flight node execution (AbortController on the workflow store). */
+  onStopWorkflow?: () => void;
   workflowState?: WorkflowState;
   selectedNodeIds?: string[];
 }) {
@@ -652,6 +660,9 @@ export function FlowyAgentPanel({
   flowyAgentModeRef.current = flowyAgentMode;
   const [enforceCanvasControl, setEnforceCanvasControl] = useState<boolean>(() => loadEnforceCanvasControl());
   const [requireCautionApproval, setRequireCautionApproval] = useState<boolean>(() => loadRequireCautionApproval());
+  const [plannerLlm, setPlannerLlm] = useState<FlowyPlannerLlmChoice>(() => loadFlowyPlannerLlm());
+  const plannerLlmRef = useRef(plannerLlm);
+  plannerLlmRef.current = plannerLlm;
   const footerInputId = useId();
 
   const [isDocked, setIsDocked] = useState<boolean>(() => loadDockedPreference());
@@ -701,6 +712,8 @@ export function FlowyAgentPanel({
   const autoApplyStartedForOpsRef = useRef<EditOperation[] | null>(null);
   const plannedToActualNodeIdRef = useRef<Map<string, string>>(new Map());
   const activePlanAbortRef = useRef<AbortController | null>(null);
+  /** Flowy-approved node runs: abort skips remaining nodes; `onStopWorkflow` cancels current `executeWorkflow`. */
+  const flowyRunAbortRef = useRef<AbortController | null>(null);
   const lastGoalRef = useRef<string | null>(null);
   const [activeDecomposition, setActiveDecomposition] = useState<DecompositionInfo | null>(null);
   const activeDecompositionRef = useRef<DecompositionInfo | null>(null);
@@ -781,6 +794,10 @@ export function FlowyAgentPanel({
   useEffect(() => {
     saveRequireCautionApproval(requireCautionApproval);
   }, [requireCautionApproval]);
+
+  useEffect(() => {
+    saveFlowyPlannerLlm(plannerLlm);
+  }, [plannerLlm]);
 
   useEffect(() => {
     if (!historyMenuOpen) return;
@@ -920,6 +937,28 @@ export function FlowyAgentPanel({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
+  const cancelFlowyNodeRun = useCallback(() => {
+    flowyRunAbortRef.current?.abort();
+    onStopWorkflow?.();
+  }, [onStopWorkflow]);
+
+  const runFlowyPendingNodes = useCallback(
+    async (nodeIds: string[]): Promise<boolean> => {
+      if (!onRunNodeIds || nodeIds.length === 0) return false;
+      const ac = new AbortController();
+      flowyRunAbortRef.current = ac;
+      setIsRunning(true);
+      try {
+        await onRunNodeIds(nodeIds, { signal: ac.signal });
+        return !ac.signal.aborted;
+      } finally {
+        if (flowyRunAbortRef.current === ac) flowyRunAbortRef.current = null;
+        setIsRunning(false);
+      }
+    },
+    [onRunNodeIds]
+  );
+
   const requestPlan = useCallback(
     async (message: string, opts?: { suppressUserEcho?: boolean; stageIndex?: number; decompositionStages?: DecompositionStage[]; runQualityCheck?: boolean }) => {
       const trimmed = message.trim();
@@ -1008,6 +1047,7 @@ export function FlowyAgentPanel({
           openflowUiSnapshot = undefined;
         }
 
+        const llm = plannerLlmRef.current;
         const body: Record<string, unknown> = {
           message: fullMessage,
           workflowState: stateForRequest,
@@ -1020,6 +1060,8 @@ export function FlowyAgentPanel({
           enforceCanvasControl,
           requireCautionApproval,
           openflowUiSnapshot,
+          provider: llm.provider,
+          model: llm.model,
         };
         if (opts?.stageIndex !== undefined) body.stageIndex = opts.stageIndex;
         if (opts?.decompositionStages) body.decompositionStages = opts.decompositionStages;
@@ -1185,26 +1227,27 @@ export function FlowyAgentPanel({
               setInput("");
               return;
             }
-            if (isRunning) {
-              pushAssistant("Already running now.");
+            if (flowyRunAbortRef.current) {
+              cancelFlowyNodeRun();
+              pushAssistant(data.assistantText || "Stopped the workflow run.");
               setInput("");
               return;
             }
             setInput("");
-            setIsRunning(true);
-            try {
-              await onRunNodeIds(pendingExecuteNodeIds);
-              pushAssistant(data.assistantText || "Run triggered for pending execution nodes.");
-              setPendingOperations(null);
-              resetPendingUiCommands();
-              setPendingExplanation(null);
-              setPendingExecuteNodeIds(null);
-              setPendingRunApprovalRequired(true);
-              setExecutionIndex(0);
-              autoRunCompletedRef.current = true;
-            } finally {
-              setIsRunning(false);
+            const finished = await runFlowyPendingNodes(pendingExecuteNodeIds);
+            if (!finished) {
+              pushAssistant("Run stopped.");
+              setInput("");
+              return;
             }
+            pushAssistant(data.assistantText || "Run triggered for pending execution nodes.");
+            setPendingOperations(null);
+            resetPendingUiCommands();
+            setPendingExplanation(null);
+            setPendingExecuteNodeIds(null);
+            setPendingRunApprovalRequired(true);
+            setExecutionIndex(0);
+            autoRunCompletedRef.current = true;
             return;
           }
 
@@ -1336,17 +1379,20 @@ export function FlowyAgentPanel({
       }
     },
     [
+      cancelFlowyNodeRun,
       contextNodeIds,
       customInstructions,
       imageAttachments,
       isPlanning,
+      onRunNodeIds,
+      resetPendingUiCommands,
+      requireCautionApproval,
+      runFlowyPendingNodes,
       scrollToBottom,
       stateForRequest,
       updateSessionMessages,
       canvasStateMemory,
       enforceCanvasControl,
-      requireCautionApproval,
-      resetPendingUiCommands,
     ]
   );
 
@@ -2415,13 +2461,15 @@ export function FlowyAgentPanel({
                     <button
                       type="button"
                       onClick={async () => {
-                        if (isRunning) return;
-                        setIsRunning(true);
-                        try {
-                          await onRunNodeIds(pendingExecuteNodeIds);
-                        } finally {
-                          setIsRunning(false);
+                        if (isRunning) {
+                          cancelFlowyNodeRun();
+                          return;
                         }
+                        const ids = pendingExecuteNodeIds;
+                        if (!ids?.length || !onRunNodeIds) return;
+                        const finished = await runFlowyPendingNodes(ids);
+                        if (!finished) return;
+
                         dismissPendingPlan();
 
                         const goal = lastGoalRef.current;
@@ -2448,10 +2496,24 @@ export function FlowyAgentPanel({
                           );
                         }
                       }}
-                      disabled={isRunning || isPlanning || isExecutingStep}
-                      className="flex h-7 shrink-0 items-center gap-1 rounded-xl border border-emerald-400/30 bg-emerald-500/[0.14] px-2.5 text-[11px] font-medium text-emerald-300 backdrop-blur-md transition-[filter] hover:brightness-125"
+                      disabled={isPlanning || isExecutingStep}
+                      title={isRunning ? "Stop workflow run" : "Run pending nodes"}
+                      aria-pressed={isRunning}
+                      className={`flex h-7 shrink-0 items-center gap-1.5 rounded-xl border px-2.5 text-[11px] font-medium backdrop-blur-md transition-[filter] ${
+                        isRunning
+                          ? "border-neutral-300 bg-white text-neutral-900 shadow-sm hover:bg-neutral-100"
+                          : "border-emerald-400/30 bg-emerald-500/[0.14] text-emerald-300 hover:brightness-125"
+                      }`}
                     >
-                      {isRunning ? "Running..." : "Run"}
+                      {isRunning ? (
+                        <>
+                          <Loader2 className="size-3.5 shrink-0 animate-spin text-neutral-900" aria-hidden />
+                          <span className="size-2 shrink-0 rounded-full bg-neutral-900" aria-hidden />
+                          <span>Stop</span>
+                        </>
+                      ) : (
+                        "Run"
+                      )}
                     </button>
                   ) : (
                     <button
@@ -2581,7 +2643,7 @@ export function FlowyAgentPanel({
                   className="max-h-[200px] min-h-[22px] w-full resize-none bg-transparent text-sm leading-snug text-neutral-100 outline-none placeholder:text-neutral-500"
                 />
               </div>
-              <div className="flex w-full items-center gap-1">
+              <div className="flex w-full flex-wrap items-center gap-1">
                 <div
                   className="relative grid w-[min(100%,10rem)] shrink-0 grid-cols-2 rounded-xl bg-[#313131] p-1"
                   role="radiogroup"
@@ -2609,7 +2671,33 @@ export function FlowyAgentPanel({
                     </button>
                   ))}
                 </div>
-                <div className="min-w-0 flex-1" />
+                <label className="sr-only" htmlFor="flowy-planner-model">
+                  Planner model
+                </label>
+                <select
+                  id="flowy-planner-model"
+                  aria-label="Planner model"
+                  value={flowyPlannerLlmOptionId(plannerLlm)}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    const opt = FLOWY_PLANNER_LLM_OPTIONS.find(
+                      (o) => flowyPlannerLlmOptionId({ provider: o.provider, model: o.model }) === id
+                    );
+                    if (opt) setPlannerLlm({ provider: opt.provider, model: opt.model });
+                  }}
+                  disabled={isPlanning || isExecutingStep || isRunning}
+                  className="min-w-0 max-w-[min(100%,14rem)] shrink rounded-lg border border-white/10 bg-[#313131] px-2 py-1 text-[11px] font-medium text-neutral-200 outline-none focus-visible:ring-2 focus-visible:ring-white/25 disabled:opacity-50"
+                >
+                  {FLOWY_PLANNER_LLM_OPTIONS.map((o) => (
+                    <option
+                      key={flowyPlannerLlmOptionId({ provider: o.provider, model: o.model })}
+                      value={flowyPlannerLlmOptionId({ provider: o.provider, model: o.model })}
+                    >
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="min-w-0 flex-1 basis-[4rem]" />
                 <div className="flex shrink-0 items-center gap-0.5">
                   <input
                     ref={imageInputRef}

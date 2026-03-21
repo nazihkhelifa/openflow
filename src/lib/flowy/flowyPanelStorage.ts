@@ -7,6 +7,8 @@ export const FLOWY_ACTIVE_SESSION_KEY = "openflows-flowy-active-session";
 export const FLOWY_CUSTOM_INSTRUCTIONS_KEY = "openflows-flowy-custom-instructions";
 export const FLOWY_DOCKED_KEY = "openflows-flowy-docked";
 export const FLOWY_AGENT_MODE_KEY = "openflows-flowy-agent-mode";
+/** JSON: { "provider": "openai" | "google", "model": string } for Flowy panel → Python planner */
+export const FLOWY_PLANNER_LLM_KEY = "openflows-flowy-planner-llm";
 export const FLOWY_ENFORCE_CANVAS_CONTROL_KEY = "openflows-flowy-enforce-canvas-control";
 export const FLOWY_REQUIRE_CAUTION_APPROVAL_KEY = "openflows-flowy-require-caution-approval";
 export const FLOWY_STYLE_MEMORY_KEY = "openflows-flowy-style-memory";
@@ -169,6 +171,71 @@ export function saveFlowyAgentMode(mode: FlowyAgentMode): void {
   } catch {
     /* ignore */
   }
+}
+
+export type FlowyPlannerLlmProvider = "openai" | "google";
+
+export type FlowyPlannerLlmChoice = {
+  provider: FlowyPlannerLlmProvider;
+  model: string;
+};
+
+/** Options shown in the Flowy chat panel (must match backend `content_writer.py` support). */
+export const FLOWY_PLANNER_LLM_OPTIONS: Array<{
+  provider: FlowyPlannerLlmProvider;
+  model: string;
+  label: string;
+}> = [
+  { provider: "google", model: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+  { provider: "google", model: "gemini-3-flash-preview", label: "Gemini 3 Flash" },
+  { provider: "google", model: "gemini-3-pro-preview", label: "Gemini 3 Pro" },
+  { provider: "google", model: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro" },
+  { provider: "openai", model: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
+  { provider: "openai", model: "gpt-4.1-nano", label: "GPT-4.1 Nano" },
+];
+
+const DEFAULT_FLOWY_PLANNER_LLM: FlowyPlannerLlmChoice = {
+  provider: "openai",
+  model: "gpt-4.1-mini",
+};
+
+function _coercePlannerLlm(raw: unknown): FlowyPlannerLlmChoice | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const provider = o.provider === "google" || o.provider === "openai" ? o.provider : null;
+  const model = typeof o.model === "string" ? o.model.trim() : "";
+  if (!provider || !model) return null;
+  const ok = FLOWY_PLANNER_LLM_OPTIONS.some((x) => x.provider === provider && x.model === model);
+  return ok ? { provider, model } : null;
+}
+
+export function loadFlowyPlannerLlm(): FlowyPlannerLlmChoice {
+  if (typeof window === "undefined") return DEFAULT_FLOWY_PLANNER_LLM;
+  try {
+    const raw = localStorage.getItem(FLOWY_PLANNER_LLM_KEY);
+    if (!raw) return DEFAULT_FLOWY_PLANNER_LLM;
+    const parsed = _coercePlannerLlm(JSON.parse(raw));
+    return parsed ?? DEFAULT_FLOWY_PLANNER_LLM;
+  } catch {
+    return DEFAULT_FLOWY_PLANNER_LLM;
+  }
+}
+
+export function saveFlowyPlannerLlm(choice: FlowyPlannerLlmChoice): void {
+  if (typeof window === "undefined") return;
+  try {
+    const ok = FLOWY_PLANNER_LLM_OPTIONS.some(
+      (x) => x.provider === choice.provider && x.model === choice.model
+    );
+    if (!ok) return;
+    localStorage.setItem(FLOWY_PLANNER_LLM_KEY, JSON.stringify(choice));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function flowyPlannerLlmOptionId(choice: FlowyPlannerLlmChoice): string {
+  return `${choice.provider}:${choice.model}`;
 }
 
 export function loadEnforceCanvasControl(): boolean {

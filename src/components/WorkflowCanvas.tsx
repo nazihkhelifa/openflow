@@ -244,10 +244,13 @@ export function WorkflowCanvas() {
   const setNodeGroupId = useWorkflowStore((state) => state.setNodeGroupId);
   const clampNodesToGroup = useWorkflowStore((state) => state.clampNodesToGroup);
   const executeWorkflow = useWorkflowStore((state) => state.executeWorkflow);
+  const stopWorkflow = useWorkflowStore((state) => state.stopWorkflow);
   const handleFlowyRunNodeIds = useCallback(
-    async (nodeIds: string[]) => {
+    async (nodeIds: string[], opts?: { signal?: AbortSignal }) => {
       if (!nodeIds || nodeIds.length === 0) return;
+      const signal = opts?.signal;
       for (const nodeId of nodeIds) {
+        if (signal?.aborted) return;
         try {
           await executeWorkflow(nodeId);
         } catch (e) {
@@ -1934,6 +1937,7 @@ export function WorkflowCanvas() {
         onClose={() => setIsChatOpen(false)}
         onApplyEdits={handleApplyEdits}
         onRunNodeIds={handleFlowyRunNodeIds}
+        onStopWorkflow={stopWorkflow}
         workflowState={chatWorkflowState}
         selectedNodeIds={selectedNodeIds}
       />

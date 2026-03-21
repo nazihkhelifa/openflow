@@ -14,6 +14,7 @@ const mockGetNodeById = vi.fn();
 const mockAddToGlobalHistory = vi.fn();
 const mockSetNodeGroupId = vi.fn();
 const mockExecuteWorkflow = vi.fn();
+const mockStopWorkflow = vi.fn();
 const mockCopySelectedNodes = vi.fn();
 const mockPasteNodes = vi.fn();
 const mockClearClipboard = vi.fn();
@@ -120,6 +121,7 @@ const createDefaultState = (overrides = {}) => ({
   addToGlobalHistory: mockAddToGlobalHistory,
   setNodeGroupId: mockSetNodeGroupId,
   executeWorkflow: mockExecuteWorkflow,
+  stopWorkflow: mockStopWorkflow,
   isModalOpen: false,
   showQuickstart: false,
   setShowQuickstart: mockSetShowQuickstart,
