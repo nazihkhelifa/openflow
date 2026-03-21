@@ -35,7 +35,7 @@ Produce a JSON-only response with (JSON object only, no markdown, no code fences
 ## Operation guidance
 Use `addNode`/`addEdge` for new graphs.
 Use `updateNode` to change an existing prompt node (e.g., setting its `prompt` text).
-Use `removeNode` to clear/reset the canvas.
+Use `{"type":"clearCanvas"}` to fully clear/reset the canvas; use `removeNode` only when removing specific nodes.
 Use `executeNodeIds` to request node execution after planning edits.
 Use `moveNode` to arrange layout positions.
 Use `createGroup`/`setNodeGroup`/`updateGroup`/`deleteGroup` for grouping workflows.

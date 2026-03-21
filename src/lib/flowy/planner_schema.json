@@ -35,7 +35,8 @@
     "createGroup",
     "deleteGroup",
     "updateGroup",
-    "setNodeGroup"
+    "setNodeGroup",
+    "clearCanvas"
   ],
   "modelCapabilities": {
     "imageGeneration": [

@@ -38,5 +38,28 @@ describe("optimizeOpsForApply", () => {
     });
     expect(optimized).toHaveLength(0);
   });
+
+  it("flushes pending updates before clearCanvas and resets edge dedupe so the same edge can repeat after clear", () => {
+    const ops: EditOperation[] = [
+      { type: "updateNode", nodeId: "a", data: { prompt: "x" } },
+      { type: "addEdge", source: "a", target: "b", sourceHandle: "text", targetHandle: "text" },
+      { type: "clearCanvas" },
+      { type: "addEdge", source: "a", target: "b", sourceHandle: "text", targetHandle: "text" },
+      { type: "addEdge", source: "a", target: "b", sourceHandle: "text", targetHandle: "text" },
+    ];
+    const optimized = optimizeOpsForApply(ops, {
+      nodes: [
+        { id: "a", data: {} },
+        { id: "b", data: {} },
+      ] as any,
+      edges: [],
+    });
+    expect(optimized.map((o) => o.type)).toEqual([
+      "updateNode",
+      "addEdge",
+      "clearCanvas",
+      "addEdge",
+    ]);
+  });
 });
 

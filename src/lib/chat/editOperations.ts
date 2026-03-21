@@ -45,7 +45,9 @@ export type EditOperation =
         Pick<NodeGroup, "name" | "color" | "locked" | "position" | "size">
       >;
     }
-  | { type: "setNodeGroup"; nodeId: string; groupId?: string };
+  | { type: "setNodeGroup"; nodeId: string; groupId?: string }
+  /** Removes all nodes, edges, and groups (full canvas reset). */
+  | { type: "clearCanvas" };
 
 /**
  * Result of applying edit operations to the workflow.
@@ -136,6 +138,14 @@ export function applyEditOperations(
         edges = edges.filter(
           (e) => e.source !== operation.nodeId && e.target !== operation.nodeId
         );
+        applied++;
+        break;
+      }
+
+      case "clearCanvas": {
+        nodes = [];
+        edges = [];
+        groups = {};
         applied++;
         break;
       }
@@ -365,6 +375,8 @@ export function narrateOperations(operations: EditOperation[]): string {
         return `Updated group ${op.groupId}`;
       case "setNodeGroup":
         return `Updated group membership for ${op.nodeId}`;
+      case "clearCanvas":
+        return "Cleared canvas (all nodes, edges, groups)";
     }
   });
 

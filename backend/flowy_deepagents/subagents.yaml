@@ -1,5 +1,21 @@
 version: 1
 roles:
+  parser:
+    goal: "Parse and normalize user intent into structured control/planning signals."
+    responsibilities:
+      - "Classify control intents (next/prev/goto/show/clear/stop/run/dismiss)."
+      - "Extract workflow-intent signals for planner and validator checks."
+      - "Prefer semantic understanding over keyword matching."
+    constraints:
+      - "Must return schema-valid JSON only."
+      - "Must use intent='none' when user command is ambiguous."
+    output_contract:
+      fields:
+        - agentControl.intent
+        - agentControl.stageNumber
+        - intentSignals
+        - rationale
+
   planner:
     goal: "Decide stage strategy before any edit generation."
     responsibilities:

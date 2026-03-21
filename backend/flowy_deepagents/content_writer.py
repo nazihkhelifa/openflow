@@ -65,6 +65,37 @@ class RouterIntentModel(BaseModel):
     reason: str = ""
 
 
+class AgentControlIntentModel(BaseModel):
+    intent: Literal[
+        "none",
+        "next_stage",
+        "prev_stage",
+        "goto_stage",
+        "show_stages",
+        "clear_plan",
+        "stop",
+        "run_now",
+        "dismiss_changes",
+    ] = "none"
+    stageNumber: Optional[int] = None
+    reply: str = ""
+    reason: str = ""
+    confidence: float = 0.0
+    directCommand: bool = False
+
+
+class UserIntentSignalsModel(BaseModel):
+    visualAssessmentRequest: bool = False
+    planEditRequest: bool = False
+    asksUpscale: bool = False
+    asksSplitGrid: bool = False
+    asksExtractFrame: bool = False
+    asksModelTune: bool = False
+    asksEaseCurveEdit: bool = False
+    asksSwitchRulesEdit: bool = False
+    rationale: str = ""
+
+
 class FlowyPlanJsonModel(BaseModel):
     """Top-level planner JSON; operations stay as dicts for downstream validation."""
 
@@ -207,6 +238,67 @@ def _decompose_goal(
     return None
 
 
+def _revise_decomposition(
+    model: Any,
+    message: str,
+    workflow_state: Dict[str, Any],
+    selected_node_ids: List[str],
+    chat_history: List[Dict[str, str]],
+    prior_stages: List[GoalStageModel],
+) -> Optional[GoalDecompositionModel]:
+    """
+    Revise an existing decomposition from user instructions
+    (add/remove/reorder/update steps) and return a fresh stage list.
+    """
+    prior = [
+        {
+            "id": s.id,
+            "title": s.title,
+            "instruction": s.instruction,
+            "dependsOn": s.dependsOn,
+            "expectedOutput": s.expectedOutput,
+            "requiresExecution": s.requiresExecution,
+        }
+        for s in prior_stages
+    ]
+    brief = _build_workflow_brief_for_router(workflow_state, selected_node_ids)
+    system_prompt = (
+        "You revise an existing stage plan for a node-based creative workflow.\n"
+        "Return ONLY JSON matching GoalDecompositionModel.\n"
+        "Keep stages concrete, minimal, and execution-ready.\n"
+        "Respect the user's requested edits to steps (remove, add, reorder, replace).\n"
+        "If user wants a totally different plan, replace the plan.\n"
+        "Do not output markdown."
+    )
+    user_content = (
+        f"UserPlanEditRequest:\n{message}\n\n"
+        f"ExistingStages (JSON):\n{json.dumps(prior, ensure_ascii=False, indent=2)}\n\n"
+        f"WorkflowBrief (JSON):\n{json.dumps(brief, ensure_ascii=False)}\n\n"
+        "Return ONLY the JSON object."
+    )
+    lc_messages: List[Any] = [SystemMessage(content=system_prompt)]
+    lc_messages.extend(_history_to_langchain_messages(chat_history))
+    lc_messages.append(HumanMessage(content=user_content))
+
+    try:
+        structured = model.with_structured_output(GoalDecompositionModel)
+        result = structured.invoke(lc_messages)
+        if isinstance(result, GoalDecompositionModel) and result.shouldDecompose and result.stages:
+            return result
+    except Exception:
+        pass
+
+    try:
+        resp = model.invoke(lc_messages, response_format={"type": "json_object"})
+        raw = str(getattr(resp, "content", "") or "")
+        data = json.loads(raw) if raw.strip() else {}
+        if isinstance(data, dict) and data.get("shouldDecompose") and data.get("stages"):
+            return GoalDecompositionModel(**data)
+    except Exception:
+        pass
+    return None
+
+
 def _check_quality(
     model: Any,
     user_goal: str,
@@ -327,23 +419,6 @@ def _build_human_message_with_attachments(
     for att in attachments[:6]:
         content.append({"type": "image_url", "image_url": {"url": att["dataUrl"]}})
     return HumanMessage(content=content)
-
-
-def _looks_like_visual_assessment_request(message: str) -> bool:
-    m = (message or "").lower()
-    cues = [
-        "what do you think",
-        "thoughts on this",
-        "rate this",
-        "is this good",
-        "critique",
-        "feedback",
-        "analyze this image",
-        "analyze this",
-        "review this image",
-        "quality",
-    ]
-    return any(c in m for c in cues)
 
 
 def _materialize_attachment_operations(
@@ -664,6 +739,10 @@ def _optimize_operations_pre_validation(
             seen_edges.add(key)
             out.append(op)
             continue
+        if t == "clearCanvas":
+            seen_edges.clear()
+            out.append(op)
+            continue
         out.append(op)
 
     return out
@@ -715,14 +794,8 @@ def _validate_edit_operations(operations: List[Dict[str, Any]], workflow_state: 
     initial_node_ids = {n.get("id") for n in initial_nodes if isinstance(n, dict) and n.get("id")}
     initial_edge_ids = {e.get("id") for e in initial_edges if isinstance(e, dict) and e.get("id")}
 
-    added_node_ids: set[str] = set()
-    for op in operations:
-        if not isinstance(op, dict):
-            continue
-        if op.get("type") == "addNode" and op.get("nodeId"):
-            added_node_ids.add(op["nodeId"])
-
-    valid_node_ids = initial_node_ids | added_node_ids
+    # Simulate node presence in plan order so clearCanvas / removeNode / addNode chains validate correctly.
+    sim_nodes: set[str] = set(initial_node_ids)
 
     for idx, op in enumerate(operations):
         if not isinstance(op, dict):
@@ -737,30 +810,39 @@ def _validate_edit_operations(operations: List[Dict[str, Any]], workflow_state: 
         if op_type == "addNode":
             node_type = op.get("nodeType")
             node_id = op.get("nodeId")
-            if node_type not in allowed_nodes:
+            type_ok = node_type in allowed_nodes
+            if not type_ok:
                 errors.append(f"operations[{idx}].nodeType invalid: {node_type}")
-            if not node_id or not isinstance(node_id, str):
+            id_ok = isinstance(node_id, str) and bool(node_id)
+            if not id_ok:
                 errors.append(f"operations[{idx}].nodeId is required for subsequent ops (missing).")
+            elif node_id in sim_nodes:
+                errors.append(f"operations[{idx}].nodeId already exists: {node_id}")
+                id_ok = False
+            if type_ok and id_ok:
+                sim_nodes.add(node_id)
 
-        if op_type == "removeNode":
+        elif op_type == "removeNode":
             node_id = op.get("nodeId")
-            if not node_id or node_id not in valid_node_ids:
+            if not node_id or node_id not in sim_nodes:
                 errors.append(f"operations[{idx}].nodeId not found: {node_id}")
+            else:
+                sim_nodes.discard(node_id)
 
-        if op_type == "updateNode":
+        elif op_type == "updateNode":
             node_id = op.get("nodeId")
-            if not node_id or node_id not in valid_node_ids:
+            if not node_id or node_id not in sim_nodes:
                 errors.append(f"operations[{idx}].nodeId not found: {node_id}")
             data = op.get("data")
             if not isinstance(data, dict):
                 errors.append(f"operations[{idx}].data must be an object")
 
-        if op_type == "addEdge":
+        elif op_type == "addEdge":
             source = op.get("source")
             target = op.get("target")
-            if not source or source not in valid_node_ids:
+            if not source or source not in sim_nodes:
                 errors.append(f"operations[{idx}].source nodeId not found: {source}")
-            if not target or target not in valid_node_ids:
+            if not target or target not in sim_nodes:
                 errors.append(f"operations[{idx}].target nodeId not found: {target}")
 
             sh = op.get("sourceHandle")
@@ -769,37 +851,37 @@ def _validate_edit_operations(operations: List[Dict[str, Any]], workflow_state: 
             if handle_error:
                 errors.append(f"operations[{idx}] edge handle error: {handle_error}")
 
-        if op_type == "removeEdge":
+        elif op_type == "removeEdge":
             edge_id = op.get("edgeId")
             if not edge_id or edge_id not in initial_edge_ids:
                 errors.append(f"operations[{idx}].edgeId not found: {edge_id}")
 
-        if op_type == "moveNode":
+        elif op_type == "moveNode":
             node_id = op.get("nodeId")
             pos = op.get("position")
-            if not node_id or node_id not in valid_node_ids:
+            if not node_id or node_id not in sim_nodes:
                 errors.append(f"operations[{idx}].nodeId not found: {node_id}")
             if not isinstance(pos, dict) or not isinstance(pos.get("x"), (int, float)) or not isinstance(pos.get("y"), (int, float)):
                 errors.append(f"operations[{idx}].position must be an object with numeric x/y")
 
-        if op_type == "createGroup":
+        elif op_type == "createGroup":
             node_ids = op.get("nodeIds")
             if not isinstance(node_ids, list) or len(node_ids) == 0:
                 errors.append(f"operations[{idx}].nodeIds must be a non-empty list")
             else:
                 for nid in node_ids:
-                    if nid not in valid_node_ids:
+                    if nid not in sim_nodes:
                         errors.append(f"operations[{idx}] nodeIds contains unknown nodeId: {nid}")
             color = op.get("color")
             if color is not None and color not in {"neutral", "blue", "green", "purple", "orange", "red"}:
                 errors.append(f"operations[{idx}].color invalid: {color}")
 
-        if op_type == "deleteGroup":
+        elif op_type == "deleteGroup":
             group_id = op.get("groupId")
             if not isinstance(group_id, str) or not group_id.strip():
                 errors.append(f"operations[{idx}].groupId is required")
 
-        if op_type == "updateGroup":
+        elif op_type == "updateGroup":
             group_id = op.get("groupId")
             updates = op.get("updates")
             if not isinstance(group_id, str) or not group_id.strip():
@@ -807,13 +889,19 @@ def _validate_edit_operations(operations: List[Dict[str, Any]], workflow_state: 
             if not isinstance(updates, dict):
                 errors.append(f"operations[{idx}].updates must be an object")
 
-        if op_type == "setNodeGroup":
+        elif op_type == "setNodeGroup":
             node_id = op.get("nodeId")
             group_id = op.get("groupId")
-            if not node_id or node_id not in valid_node_ids:
+            if not node_id or node_id not in sim_nodes:
                 errors.append(f"operations[{idx}].nodeId not found: {node_id}")
             if group_id is not None and not isinstance(group_id, str):
                 errors.append(f"operations[{idx}].groupId must be string or null")
+
+        elif op_type == "clearCanvas":
+            extra = [k for k in op.keys() if k != "type"]
+            if extra:
+                errors.append(f"operations[{idx}] clearCanvas must not include extra keys: {sorted(extra)}")
+            sim_nodes.clear()
 
     return {"ok": not errors, "errors": errors}
 
@@ -824,51 +912,25 @@ def _validate_toolbar_intent_plan(
     operations: List[Dict[str, Any]],
     workflow_state: Optional[Dict[str, Any]] = None,
     selected_node_ids: Optional[List[str]] = None,
+    intent_signals: Optional[UserIntentSignalsModel] = None,
 ) -> Dict[str, Any]:
     """
     Validate that common toolbar requests are expressed with the expected
     operation pattern so the UI can apply them deterministically.
     """
     errors: List[str] = []
-    raw_msg = message or ""
-    marker = "User request:"
-    marker_idx = raw_msg.rfind(marker)
-    if marker_idx != -1:
-        msg = raw_msg[marker_idx + len(marker) :].strip().lower()
-    else:
-        msg = raw_msg.lower()
-
     add_nodes = [op for op in operations if isinstance(op, dict) and op.get("type") == "addNode"]
     add_edges = [op for op in operations if isinstance(op, dict) and op.get("type") == "addEdge"]
     update_nodes = [op for op in operations if isinstance(op, dict) and op.get("type") == "updateNode"]
     execute_ids = parsed.get("executeNodeIds")
     execute_ids_list = execute_ids if isinstance(execute_ids, list) else []
 
-    asks_upscale = "upscale" in msg
-    asks_grid = "split into grid" in msg or ("grid" in msg and "split" in msg)
-    asks_extract_frame = "extract frame" in msg or ("frame" in msg and "video" in msg)
-    # Keep this explicit to avoid false positives on generic "model" mentions.
-    asks_model_tune = any(
-        k in msg
-        for k in [
-            "change model",
-            "switch model",
-            "set model",
-            "change provider",
-            "set provider",
-            "aspect ratio",
-            "resolution",
-            "temperature",
-            "max tokens",
-            "parameters",
-        ]
-    )
-    asks_ease = any(k in msg for k in ["ease curve", "bezier", "easing", "output duration"])
-    asks_switch_rules = (
-        "conditional switch" in msg
-        or "switch rules" in msg
-        or "edit rules" in msg
-    )
+    asks_upscale = bool(intent_signals and intent_signals.asksUpscale)
+    asks_grid = bool(intent_signals and intent_signals.asksSplitGrid)
+    asks_extract_frame = bool(intent_signals and intent_signals.asksExtractFrame)
+    asks_model_tune = bool(intent_signals and intent_signals.asksModelTune)
+    asks_ease = bool(intent_signals and intent_signals.asksEaseCurveEdit)
+    asks_switch_rules = bool(intent_signals and intent_signals.asksSwitchRulesEdit)
 
     if asks_upscale:
         has_upscale_add = any(op.get("nodeType") == "generateImage" for op in add_nodes)
@@ -960,7 +1022,7 @@ def _coerce_bool(value: Any, default: bool = False) -> bool:
 def _operations_require_manual_approval(operations: Any) -> bool:
     if not isinstance(operations, list):
         return False
-    destructive_ops = {"removeNode", "removeEdge", "deleteGroup"}
+    destructive_ops = {"removeNode", "removeEdge", "deleteGroup", "clearCanvas"}
     for op in operations:
         if isinstance(op, dict) and str(op.get("type") or "") in destructive_ops:
             return True
@@ -969,7 +1031,7 @@ def _operations_require_manual_approval(operations: Any) -> bool:
 
 def _operation_risk_tier(op: Dict[str, Any]) -> str:
     op_type = str(op.get("type") or "")
-    if op_type in {"removeNode", "removeEdge", "deleteGroup"}:
+    if op_type in {"removeNode", "removeEdge", "deleteGroup", "clearCanvas"}:
         return "destructive"
     if op_type in {"updateNode", "moveNode", "updateGroup", "setNodeGroup"}:
         return "caution"
@@ -1024,29 +1086,35 @@ def _build_post_apply_verification(
         return PostApplyVerificationModel(ok=False, warnings=["operations_missing_or_invalid"])
     nodes_before = len([n for n in (workflow_state.get("nodes") or []) if isinstance(n, dict)])
     edges_before = len([e for e in (workflow_state.get("edges") or []) if isinstance(e, dict)])
-    node_delta = 0
-    edge_delta = 0
+    sim_n = nodes_before
+    sim_e = edges_before
     warnings: List[str] = []
     for op in operations:
         if not isinstance(op, dict):
             continue
         t = str(op.get("type") or "")
         if t == "addNode":
-            node_delta += 1
+            sim_n += 1
         elif t == "removeNode":
-            node_delta -= 1
+            sim_n -= 1
         elif t == "addEdge":
-            edge_delta += 1
+            sim_e += 1
         elif t == "removeEdge":
-            edge_delta -= 1
-    if nodes_before + node_delta < 0:
-        warnings.append("predicted_negative_node_count")
-    if edges_before + edge_delta < 0:
-        warnings.append("predicted_negative_edge_count")
+            sim_e -= 1
+        elif t == "clearCanvas":
+            sim_n = 0
+            sim_e = 0
+        if sim_n < 0:
+            warnings.append("predicted_negative_node_count")
+        if sim_e < 0:
+            warnings.append("predicted_negative_edge_count")
+    warnings = list(dict.fromkeys(warnings))
+    predicted_node_delta = sim_n - nodes_before
+    predicted_edge_delta = sim_e - edges_before
     return PostApplyVerificationModel(
         ok=len(warnings) == 0,
-        predictedNodeDelta=node_delta,
-        predictedEdgeDelta=edge_delta,
+        predictedNodeDelta=predicted_node_delta,
+        predictedEdgeDelta=predicted_edge_delta,
         warnings=warnings,
     )
 
@@ -1171,6 +1239,100 @@ def _classify_user_intent(
     if isinstance(reply, str):
         out_fb["reply"] = reply
     return out_fb
+
+
+def _parse_agent_control_intent(
+    router_model: Any,
+    message: str,
+    chat_history: List[Dict[str, str]],
+) -> Optional[AgentControlIntentModel]:
+    msg = (message or "").strip()
+    if not msg:
+        return None
+    system_prompt = (
+        "You classify whether the user message is an agent-control command.\n"
+        "Return only JSON matching AgentControlIntentModel.\n"
+        "Use intent='none' for normal creative/planning requests.\n"
+        "Use goto_stage only when an explicit stage number is provided.\n"
+        "Set confidence 0..1 and directCommand=true only when the message is clearly an explicit control command.\n"
+        "If the message asks to build/create/edit canvas content, prefer intent='none'."
+    )
+    user_prompt = (
+        f"UserMessage:\n{msg}\n\n"
+        "Classify intent among: none, next_stage, prev_stage, goto_stage, show_stages, "
+        "clear_plan, stop, run_now, dismiss_changes.\n"
+        "Return ONLY JSON."
+    )
+    lc_messages: List[Any] = [SystemMessage(content=system_prompt)]
+    lc_messages.extend(_history_to_langchain_messages(chat_history))
+    lc_messages.append(HumanMessage(content=user_prompt))
+
+    try:
+        structured = router_model.with_structured_output(AgentControlIntentModel)
+        out = structured.invoke(lc_messages)
+        if isinstance(out, AgentControlIntentModel):
+            return out
+    except Exception:
+        pass
+
+    try:
+        resp = router_model.invoke(lc_messages, response_format={"type": "json_object"})
+        raw = str(getattr(resp, "content", "") or "")
+        data = json.loads(raw) if raw.strip() else {}
+        if isinstance(data, dict):
+            return AgentControlIntentModel(**data)
+    except Exception:
+        pass
+    return None
+
+
+def _parse_user_intent_signals(
+    router_model: Any,
+    message: str,
+    chat_history: List[Dict[str, str]],
+) -> UserIntentSignalsModel:
+    msg = (message or "").strip()
+    if not msg:
+        return UserIntentSignalsModel()
+    system_prompt = (
+        "You extract structured intent signals for a visual workflow assistant.\n"
+        "Return ONLY JSON matching UserIntentSignalsModel.\n"
+        "Set each field to true only when the user's request clearly implies it."
+    )
+    user_prompt = (
+        f"UserMessage:\n{msg}\n\n"
+        "Classify signals:\n"
+        "- visualAssessmentRequest: asks critique/review/quality opinion on images/results\n"
+        "- planEditRequest: asks to edit/update/remove/reorder existing stages/plan\n"
+        "- asksUpscale: asks to upscale image result\n"
+        "- asksSplitGrid: asks split into grid/layout variants\n"
+        "- asksExtractFrame: asks extract frame from video\n"
+        "- asksModelTune: asks model/provider/parameters tuning\n"
+        "- asksEaseCurveEdit: asks easing/bezier/output duration edits\n"
+        "- asksSwitchRulesEdit: asks switch/conditional rule edits\n"
+        "Return ONLY JSON."
+    )
+    lc_messages: List[Any] = [SystemMessage(content=system_prompt)]
+    lc_messages.extend(_history_to_langchain_messages(chat_history))
+    lc_messages.append(HumanMessage(content=user_prompt))
+
+    try:
+        structured = router_model.with_structured_output(UserIntentSignalsModel)
+        out = structured.invoke(lc_messages)
+        if isinstance(out, UserIntentSignalsModel):
+            return out
+    except Exception:
+        pass
+
+    try:
+        resp = router_model.invoke(lc_messages, response_format={"type": "json_object"})
+        raw = str(getattr(resp, "content", "") or "")
+        data = json.loads(raw) if raw.strip() else {}
+        if isinstance(data, dict):
+            return UserIntentSignalsModel(**data)
+    except Exception:
+        pass
+    return UserIntentSignalsModel()
 
 
 def _build_user_prompt(
@@ -1319,6 +1481,7 @@ def _run_planner_stage(
     selected_node_ids: List[str],
     chat_history: List[Dict[str, str]],
     payload: Dict[str, Any],
+    intent_signals: Optional[UserIntentSignalsModel] = None,
 ) -> Tuple[Optional[GoalDecompositionModel], int, Optional[str], str]:
     """Subagent stage: goal decomposition and stage framing."""
     _emit_progress("subagent_planner", "framing stage plan")
@@ -1344,6 +1507,20 @@ def _run_planner_stage(
                 overallStrategy="resumed",
                 estimatedComplexity="moderate",
             )
+            if decomposition.stages and bool(intent_signals and intent_signals.planEditRequest):
+                _emit_progress("decomposing", "revising stage plan from user edits")
+                revised = _revise_decomposition(
+                    router_model,
+                    message,
+                    workflow_state,
+                    selected_node_ids,
+                    chat_history,
+                    decomposition.stages,
+                )
+                if revised and revised.shouldDecompose and revised.stages:
+                    decomposition = revised
+                    stage_index = min(max(stage_index, 0), max(len(decomposition.stages) - 1, 0))
+                    _emit_progress("decomposed", f"plan updated to {len(decomposition.stages)} stages")
         except Exception:
             decomposition = None
 
@@ -1387,6 +1564,7 @@ def _run_builder_stage(
     canvas_state_memory: Dict[str, Any],
     chat_history: List[Dict[str, str]],
     message_for_toolbar_validation: str,
+    intent_signals: Optional[UserIntentSignalsModel] = None,
 ) -> Tuple[Dict[str, Any], bool, List[str], str]:
     """
     Subagent stage: generate operations, normalize, optimize, validate with retries.
@@ -1479,6 +1657,7 @@ def _run_builder_stage(
             operations,
             workflow_state=workflow_state,
             selected_node_ids=selected_node_ids,
+            intent_signals=intent_signals,
         )
         combined_errors = [
             *(validation.get("errors") or []),
@@ -1571,6 +1750,52 @@ def main() -> None:
 
         _emit_progress("init", f"mode={agent_mode}")
 
+        intent_signals = _parse_user_intent_signals(router_model, message, chat_history)
+
+        control_intent = _parse_agent_control_intent(router_model, message, chat_history)
+        try:
+            control_threshold = float(os.environ.get("FLOWY_CONTROL_INTENT_THRESHOLD", "0.8"))
+        except ValueError:
+            control_threshold = 0.8
+        control_allowed = (
+            control_intent is not None
+            and control_intent.intent != "none"
+            and bool(control_intent.directCommand)
+            and float(control_intent.confidence or 0.0) >= control_threshold
+        )
+        if control_allowed:
+            default_reply = {
+                "next_stage": "Moving to the next stage.",
+                "prev_stage": "Going back to the previous stage.",
+                "goto_stage": f"Jumping to stage {max(1, int(control_intent.stageNumber or 1))}.",
+                "show_stages": "Showing the current stage checklist.",
+                "clear_plan": "Clearing the current plan.",
+                "stop": "Stopping current automation.",
+                "run_now": "Running pending execution now.",
+                "dismiss_changes": "Dismissing pending canvas changes.",
+            }.get(control_intent.intent, "Applying control command.")
+            sys.stdout.write(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "mode": "control",
+                        "assistantText": (control_intent.reply or default_reply).strip(),
+                        "operations": [],
+                        "requiresApproval": False,
+                        "approvalReason": "",
+                        "runApprovalRequired": False,
+                        "agentControl": {
+                            "intent": control_intent.intent,
+                            "stageNumber": control_intent.stageNumber,
+                            "reason": control_intent.reason,
+                            "confidence": control_intent.confidence,
+                            "directCommand": control_intent.directCommand,
+                        },
+                    }
+                )
+            )
+            return
+
         if agent_mode == "plan":
             _emit_progress("advisor", "running plan advisor")
             text = _run_plan_advisor_only(
@@ -1610,7 +1835,7 @@ def main() -> None:
                 else:
                 # If images are available and user asks for visual feedback,
                 # route through multimodal advisor instead of a plain router reply.
-                    if attachments and _looks_like_visual_assessment_request(message):
+                    if attachments and bool(intent_signals.visualAssessmentRequest):
                         text = _run_plan_advisor_only(
                             model, message, workflow_state, selected_node_ids, attachments, model_catalog=model_catalog, canvas_state_memory=canvas_state_memory, chat_history=chat_history
                         )
@@ -1657,6 +1882,7 @@ def main() -> None:
             selected_node_ids=selected_node_ids,
             chat_history=chat_history,
             payload=payload,
+            intent_signals=intent_signals,
         )
         planner_message = _run_prompt_specialist_stage(
             planner_message=planner_message,
@@ -1673,6 +1899,7 @@ def main() -> None:
             canvas_state_memory=canvas_state_memory,
             chat_history=chat_history,
             message_for_toolbar_validation=message,
+            intent_signals=intent_signals,
         )
 
         ok = validated_ok

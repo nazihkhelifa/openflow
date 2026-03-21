@@ -144,8 +144,21 @@ type FlowyPlanResponse = {
     validationOk?: boolean;
     qualityCheckRequested?: boolean;
   };
-  /** `chat` = conversational reply only (no canvas ops). `plan` = edit operations (may be empty). */
-  mode?: "chat" | "plan";
+  /** `chat` = conversational reply only, `plan` = edit operations, `control` = backend-classified control intent. */
+  mode?: "chat" | "plan" | "control";
+  agentControl?: {
+    intent:
+      | "next_stage"
+      | "prev_stage"
+      | "goto_stage"
+      | "show_stages"
+      | "clear_plan"
+      | "stop"
+      | "run_now"
+      | "dismiss_changes";
+    stageNumber?: number | null;
+    reason?: string;
+  };
   decomposition?: DecompositionInfo;
   qualityCheck?: QualityCheck;
 };
@@ -1070,9 +1083,150 @@ export function FlowyAgentPanel({
           throw new Error((data.error || "Plan failed") + debugSnippet);
         }
 
+        if (data.mode === "control" && data.agentControl) {
+          const sessionId = activeSessionIdRef.current;
+          const pushAssistant = (text: string) => {
+            updateSessionMessages(sessionId, (prev) => [
+              ...prev,
+              { id: `a-${Date.now()}`, role: "assistant", text },
+            ]);
+            scrollToBottom();
+          };
+          const ctrl = data.agentControl;
+          const decomp = activeDecompositionRef.current;
+
+          if (ctrl.intent === "show_stages") {
+            if (!decomp || decomp.totalStages === 0) {
+              pushAssistant(data.assistantText || "No active stage plan yet.");
+            } else {
+              const lines = decomp.stages.map((s, idx) => {
+                const mark = idx < decomp.currentStageIndex ? "[x]" : idx === decomp.currentStageIndex ? "[>]" : "[ ]";
+                return `${mark} ${idx + 1}. ${s.title || `Stage ${idx + 1}`}`;
+              });
+              pushAssistant(`Current plan stages:\n${lines.join("\n")}`);
+            }
+            setInput("");
+            return;
+          }
+
+          if (ctrl.intent === "clear_plan") {
+            setActiveDecomposition(null);
+            pushAssistant(data.assistantText || "Plan cleared.");
+            setInput("");
+            return;
+          }
+
+          if (ctrl.intent === "stop") {
+            autoRunIdRef.current += 1;
+            autoRunCompletedRef.current = true;
+            autoApplyStartedForOpsRef.current = null;
+            setIsExecutingStep(false);
+            pushAssistant(data.assistantText || "Stopped current automation.");
+            setInput("");
+            return;
+          }
+
+          if (ctrl.intent === "dismiss_changes") {
+            setPendingOperations(null);
+            setPendingExplanation(null);
+            setPendingExecuteNodeIds(null);
+            setPendingRunApprovalRequired(true);
+            setExecutionIndex(0);
+            autoRunCompletedRef.current = true;
+            pushAssistant(data.assistantText || "Dismissed pending changes.");
+            setInput("");
+            return;
+          }
+
+          if (ctrl.intent === "run_now") {
+            if (!pendingExecuteNodeIds || pendingExecuteNodeIds.length === 0 || !onRunNodeIds) {
+              pushAssistant("No runnable node set is pending right now.");
+              setInput("");
+              return;
+            }
+            if (isRunning) {
+              pushAssistant("Already running now.");
+              setInput("");
+              return;
+            }
+            setInput("");
+            setIsRunning(true);
+            try {
+              await onRunNodeIds(pendingExecuteNodeIds);
+              pushAssistant(data.assistantText || "Run triggered for pending execution nodes.");
+              setPendingOperations(null);
+              setPendingExplanation(null);
+              setPendingExecuteNodeIds(null);
+              setPendingRunApprovalRequired(true);
+              setExecutionIndex(0);
+              autoRunCompletedRef.current = true;
+            } finally {
+              setIsRunning(false);
+            }
+            return;
+          }
+
+          if (!decomp || decomp.totalStages === 0) {
+            pushAssistant("No active multi-stage plan yet.");
+            setInput("");
+            return;
+          }
+
+          if (ctrl.intent === "next_stage") {
+            const nextIdx = Math.min(decomp.currentStageIndex + 1, decomp.totalStages - 1);
+            if (nextIdx === decomp.currentStageIndex) {
+              pushAssistant("Already at the last stage.");
+              setInput("");
+              return;
+            }
+            setInput("");
+            await requestPlan(lastGoalRef.current || "Continue workflow", {
+              suppressUserEcho: true,
+              stageIndex: nextIdx,
+              decompositionStages: decomp.stages,
+            });
+            return;
+          }
+
+          if (ctrl.intent === "prev_stage") {
+            const prevIdx = Math.max(decomp.currentStageIndex - 1, 0);
+            if (prevIdx === decomp.currentStageIndex) {
+              pushAssistant("Already at the first stage.");
+              setInput("");
+              return;
+            }
+            setInput("");
+            await requestPlan(lastGoalRef.current || "Continue workflow", {
+              suppressUserEcho: true,
+              stageIndex: prevIdx,
+              decompositionStages: decomp.stages,
+            });
+            return;
+          }
+
+          if (ctrl.intent === "goto_stage") {
+            const target = Math.min(Math.max(Number(ctrl.stageNumber || 1) - 1, 0), decomp.totalStages - 1);
+            if (target === decomp.currentStageIndex) {
+              pushAssistant(`Already on stage ${target + 1}.`);
+              setInput("");
+              return;
+            }
+            setInput("");
+            await requestPlan(lastGoalRef.current || "Continue workflow", {
+              suppressUserEcho: true,
+              stageIndex: target,
+              decompositionStages: decomp.stages,
+            });
+            return;
+          }
+        }
+
         const assistantText = data.assistantText ?? "";
         let ops = data.operations ?? [];
         let mode: "chat" | "plan" = data.mode === "chat" ? "chat" : "plan";
+        if (!opts?.suppressUserEcho) {
+          lastGoalRef.current = trimmed;
+        }
         if (agentModeAtStart === "plan") {
           mode = "chat";
           ops = [];
@@ -1152,7 +1306,6 @@ export function FlowyAgentPanel({
   const handlePlan = useCallback(async () => {
     const trimmed = input.trim();
     if (!trimmed) return;
-    lastGoalRef.current = trimmed;
     const signals = extractStyleSignals(trimmed);
     setStyleMemory((prev) => {
       if (!prev) return prev;
@@ -1305,6 +1458,8 @@ export function FlowyAgentPanel({
         return `Update group (${op.groupId})`;
       case "setNodeGroup":
         return `Set group for node (${op.nodeId})`;
+      case "clearCanvas":
+        return "Clear entire canvas";
     }
     return "Apply operation";
     },
@@ -2342,6 +2497,9 @@ export function FlowyAgentPanel({
           <span className="text-neutral-500">Flowy is experimental.</span>{" "}
           <span className="text-neutral-600">
             Chat = advice only · Assist = auto-build + approve run
+          </span>
+          <span className="ml-1 text-neutral-700">
+            · Controls: next stage, prev stage, goto stage 2, show stages, run now, stop, clear plan
           </span>
         </div>
       </div>

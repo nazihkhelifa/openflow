@@ -100,6 +100,13 @@ export function optimizeOpsForApply(ops: EditOperation[], workflow: WorkflowStat
 
   for (const op of ops) {
     if (!op || typeof op !== "object") continue;
+    if (op.type === "clearCanvas") {
+      flushUpdates();
+      seenEdgeKeys.clear();
+      latestUpdateByNode.clear();
+      out.push(op);
+      continue;
+    }
     if (op.type === "updateNode") {
       const prev = latestUpdateByNode.get(op.nodeId);
       latestUpdateByNode.set(

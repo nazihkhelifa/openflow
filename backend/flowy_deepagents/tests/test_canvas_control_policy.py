@@ -20,6 +20,10 @@ class CanvasControlPolicyTests(unittest.TestCase):
         ops = [{"type": "removeNode", "nodeId": "n1"}]
         self.assertTrue(_operations_require_manual_approval(ops))
 
+    def test_clear_canvas_requires_approval(self):
+        ops = [{"type": "clearCanvas"}]
+        self.assertTrue(_operations_require_manual_approval(ops))
+
     def test_risk_summary_counts(self):
         ops = [
             {"type": "addNode", "nodeId": "a", "nodeType": "prompt"},
@@ -40,6 +44,14 @@ class CanvasControlPolicyTests(unittest.TestCase):
         check = _build_post_apply_verification(workflow, ops)
         self.assertTrue(check.ok)
         self.assertEqual(check.predictedNodeDelta, 1)
+        self.assertEqual(check.predictedEdgeDelta, -1)
+
+    def test_post_apply_clear_canvas_resets_counts(self):
+        workflow = {"nodes": [{"id": "a"}, {"id": "b"}], "edges": [{"id": "e1"}]}
+        ops = [{"type": "clearCanvas"}]
+        check = _build_post_apply_verification(workflow, ops)
+        self.assertTrue(check.ok)
+        self.assertEqual(check.predictedNodeDelta, -2)
         self.assertEqual(check.predictedEdgeDelta, -1)
 
     def test_capability_registry_includes_selected_types(self):

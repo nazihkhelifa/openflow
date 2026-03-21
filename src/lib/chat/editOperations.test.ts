@@ -162,14 +162,14 @@ describe("applyEditOperations", () => {
       expect(added.data).toHaveProperty("customTitle", "My Prompt");
     });
 
-    it("sets measured dimensions from defaultNodeDimensions", () => {
+    it("sets node style dimensions from defaultNodeDimensions", () => {
       const ops: EditOperation[] = [
         { type: "addNode", nodeType: "nanoBanana" },
       ];
 
       const result = applyEditOperations(ops, { nodes: [], edges: [] });
 
-      expect(result.nodes[0].measured).toEqual({ width: 300, height: 300 });
+      expect(result.nodes[0].style).toEqual({ width: 300, height: 300 });
     });
 
     it("increments applied count", () => {
@@ -247,6 +247,26 @@ describe("applyEditOperations", () => {
       expect(result.skipped[0]).toBe(
         'removeNode: node "ghost-node" not found'
       );
+    });
+  });
+
+  describe("clearCanvas operations", () => {
+    it("removes all nodes, edges, and groups", () => {
+      const groups = {
+        g1: { id: "g1", name: "G", color: "neutral" as const, position: { x: 0, y: 0 }, size: { width: 100, height: 100 }, locked: false },
+      };
+      const ops: EditOperation[] = [{ type: "clearCanvas" }];
+
+      const result = applyEditOperations(ops, {
+        nodes: baseNodes,
+        edges: baseEdges,
+        groups,
+      });
+
+      expect(result.nodes).toHaveLength(0);
+      expect(result.edges).toHaveLength(0);
+      expect(Object.keys(result.groups)).toHaveLength(0);
+      expect(result.applied).toBe(1);
     });
   });
 
@@ -554,6 +574,13 @@ describe("narrateOperations", () => {
       { type: "removeEdge", edgeId: "edge-42" },
     ];
     expect(narrateOperations(ops)).toBe("Removed connection edge-42");
+  });
+
+  it("produces expected narrative for clearCanvas", () => {
+    const ops: EditOperation[] = [{ type: "clearCanvas" }];
+    expect(narrateOperations(ops)).toBe(
+      "Cleared canvas (all nodes, edges, groups)"
+    );
   });
 
   it("joins multiple operations with newlines", () => {

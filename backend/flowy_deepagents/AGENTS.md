@@ -76,6 +76,7 @@ Each operation MUST be one of:
 8. `{"type":"deleteGroup","groupId": string}`
 9. `{"type":"updateGroup","groupId": string, "updates": object}`
 10. `{"type":"setNodeGroup","nodeId": string, "groupId": string?}`
+11. `{"type":"clearCanvas"}` — removes **all** nodes, edges, and groups in one step (requires approval like other destructive ops).
 
 ## Canvas rules
 - Never reference `nodeId`s that do not exist **unless** you also add them in the same `operations` list.
@@ -98,7 +99,7 @@ Each operation MUST be one of:
   - `summary`: counts, `selectedNodeIds`, and `focusNodeIds`.
 - Prefer editing **existing** nodes (by `id`) when the user refers to the current graph.
 - Plan a minimal set of operations to satisfy the request.
-- If the user asks to "clear" or "reset" the canvas, output operations that remove all nodes.
+- If the user asks to "clear" or "reset" the canvas, prefer `{"type":"clearCanvas"}` (or remove nodes individually if you must target a subset only).
 
 ## Autonomy policy
 - Default to action. If user asks to create/edit/organize/run, do not ask unnecessary clarification questions.

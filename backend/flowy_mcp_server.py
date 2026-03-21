@@ -536,10 +536,22 @@ def apply_edit_operations(operations: List[Dict[str, Any]]) -> Dict[str, Any]:
             }
 
         op_type = op.get("type")
-        if op_type not in {"addNode", "removeNode", "updateNode", "addEdge", "removeEdge"}:
+        if op_type not in {
+            "addNode",
+            "removeNode",
+            "updateNode",
+            "addEdge",
+            "removeEdge",
+            "moveNode",
+            "createGroup",
+            "deleteGroup",
+            "updateGroup",
+            "setNodeGroup",
+            "clearCanvas",
+        }:
             return {
                 "ok": False,
-                "error": f"operations[{idx}].type must be one of addNode/removeNode/updateNode/addEdge/removeEdge",
+                "error": f"operations[{idx}].type is not a supported EditOperation type",
                 "applied": 0,
             }
 
