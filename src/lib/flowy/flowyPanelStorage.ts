@@ -7,6 +7,8 @@ export const FLOWY_ACTIVE_SESSION_KEY = "openflows-flowy-active-session";
 export const FLOWY_CUSTOM_INSTRUCTIONS_KEY = "openflows-flowy-custom-instructions";
 export const FLOWY_DOCKED_KEY = "openflows-flowy-docked";
 export const FLOWY_AGENT_MODE_KEY = "openflows-flowy-agent-mode";
+export const FLOWY_ENFORCE_CANVAS_CONTROL_KEY = "openflows-flowy-enforce-canvas-control";
+export const FLOWY_REQUIRE_CAUTION_APPROVAL_KEY = "openflows-flowy-require-caution-approval";
 export const FLOWY_STYLE_MEMORY_KEY = "openflows-flowy-style-memory";
 export const FLOWY_CANVAS_STATE_MEMORY_KEY = "openflows-flowy-canvas-state-memory";
 
@@ -164,6 +166,45 @@ export function saveFlowyAgentMode(mode: FlowyAgentMode): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(FLOWY_AGENT_MODE_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadEnforceCanvasControl(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const v = localStorage.getItem(FLOWY_ENFORCE_CANVAS_CONTROL_KEY);
+    if (v === "0") return false;
+    if (v === "1") return true;
+  } catch {
+    /* ignore */
+  }
+  return true;
+}
+
+export function saveEnforceCanvasControl(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(FLOWY_ENFORCE_CANVAS_CONTROL_KEY, enabled ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadRequireCautionApproval(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(FLOWY_REQUIRE_CAUTION_APPROVAL_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function saveRequireCautionApproval(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(FLOWY_REQUIRE_CAUTION_APPROVAL_KEY, enabled ? "1" : "0");
   } catch {
     /* ignore */
   }

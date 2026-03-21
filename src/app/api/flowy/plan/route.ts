@@ -32,6 +32,8 @@ type PlanRequest = {
   decompositionStages?: Array<Record<string, unknown>>;
   /** When true, run the quality checker after planning. */
   runQualityCheck?: boolean;
+  enforceCanvasControl?: boolean;
+  requireCautionApproval?: boolean;
 };
 
 const FLOWY_VENV_HINT =

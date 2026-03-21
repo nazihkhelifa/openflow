@@ -47,3 +47,25 @@ roles:
         - executeNodeIds
         - runApprovalRequired
 
+  validator:
+    goal: "Verify operation safety, expected canvas deltas, and execution-readiness."
+    responsibilities:
+      - "Classify operation risk tiers: safe, caution, destructive."
+      - "Require approval for destructive edits and policy-driven caution edits."
+      - "Report post-apply delta checks and telemetry metadata."
+    constraints:
+      - "Must not invent operations."
+      - "Must preserve deterministic JSON fields."
+    output_contract:
+      fields:
+        - safetyPolicy
+        - postApplyCheck
+        - telemetry
+
+capabilities:
+  policy:
+    assistModeDefault: "canvas_control_first"
+    approval:
+      destructive: "always_required"
+      caution: "env_or_payload_controlled"
+

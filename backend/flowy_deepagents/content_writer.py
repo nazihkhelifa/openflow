@@ -76,6 +76,21 @@ class FlowyPlanJsonModel(BaseModel):
     runApprovalRequired: Optional[bool] = None
 
 
+class CapabilityRegistryModel(BaseModel):
+    nodeTypesPresent: List[str] = Field(default_factory=list)
+    operationTypesSupported: List[str] = Field(default_factory=list)
+    handleTypesSupported: List[str] = Field(default_factory=list)
+    selectedNodeTypes: List[str] = Field(default_factory=list)
+    canExecuteSelected: bool = False
+
+
+class PostApplyVerificationModel(BaseModel):
+    ok: bool = True
+    predictedNodeDelta: int = 0
+    predictedEdgeDelta: int = 0
+    warnings: List[str] = Field(default_factory=list)
+
+
 class PlanAdvisorJsonModel(BaseModel):
     assistantText: str = ""
 
@@ -929,6 +944,113 @@ def _validate_toolbar_intent_plan(
     return {"ok": not errors, "errors": errors}
 
 
+def _coerce_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    raw = str(value).strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _operations_require_manual_approval(operations: Any) -> bool:
+    if not isinstance(operations, list):
+        return False
+    destructive_ops = {"removeNode", "removeEdge", "deleteGroup"}
+    for op in operations:
+        if isinstance(op, dict) and str(op.get("type") or "") in destructive_ops:
+            return True
+    return False
+
+
+def _operation_risk_tier(op: Dict[str, Any]) -> str:
+    op_type = str(op.get("type") or "")
+    if op_type in {"removeNode", "removeEdge", "deleteGroup"}:
+        return "destructive"
+    if op_type in {"updateNode", "moveNode", "updateGroup", "setNodeGroup"}:
+        return "caution"
+    return "safe"
+
+
+def _summarize_operation_risks(operations: Any) -> Dict[str, int]:
+    summary = {"safe": 0, "caution": 0, "destructive": 0}
+    if not isinstance(operations, list):
+        return summary
+    for op in operations:
+        if not isinstance(op, dict):
+            continue
+        tier = _operation_risk_tier(op)
+        if tier in summary:
+            summary[tier] += 1
+    return summary
+
+
+def _build_capability_registry(
+    workflow_state: Dict[str, Any], selected_node_ids: List[str]
+) -> CapabilityRegistryModel:
+    _allowed_nodes, allowed_handles, allowed_ops = _planner_allowlists()
+    nodes = [n for n in (workflow_state.get("nodes") or []) if isinstance(n, dict)]
+    selected = set(selected_node_ids or [])
+    selected_types: List[str] = []
+    for n in nodes:
+        nid = str(n.get("id") or "")
+        ntype = str(n.get("type") or "")
+        if nid and nid in selected and ntype:
+            selected_types.append(ntype)
+    can_execute_selected = any(
+        t in {"generateImage", "generateVideo", "generate3d", "generateAudio", "llm", "codeRunner"}
+        for t in selected_types
+    )
+    present_types = sorted(
+        {str(n.get("type") or "") for n in nodes if isinstance(n.get("type"), str) and str(n.get("type")).strip()}
+    )
+    return CapabilityRegistryModel(
+        nodeTypesPresent=present_types,
+        operationTypesSupported=sorted(allowed_ops),
+        handleTypesSupported=sorted(allowed_handles),
+        selectedNodeTypes=sorted(set(selected_types)),
+        canExecuteSelected=can_execute_selected,
+    )
+
+
+def _build_post_apply_verification(
+    workflow_state: Dict[str, Any], operations: Any
+) -> PostApplyVerificationModel:
+    if not isinstance(operations, list):
+        return PostApplyVerificationModel(ok=False, warnings=["operations_missing_or_invalid"])
+    nodes_before = len([n for n in (workflow_state.get("nodes") or []) if isinstance(n, dict)])
+    edges_before = len([e for e in (workflow_state.get("edges") or []) if isinstance(e, dict)])
+    node_delta = 0
+    edge_delta = 0
+    warnings: List[str] = []
+    for op in operations:
+        if not isinstance(op, dict):
+            continue
+        t = str(op.get("type") or "")
+        if t == "addNode":
+            node_delta += 1
+        elif t == "removeNode":
+            node_delta -= 1
+        elif t == "addEdge":
+            edge_delta += 1
+        elif t == "removeEdge":
+            edge_delta -= 1
+    if nodes_before + node_delta < 0:
+        warnings.append("predicted_negative_node_count")
+    if edges_before + edge_delta < 0:
+        warnings.append("predicted_negative_edge_count")
+    return PostApplyVerificationModel(
+        ok=len(warnings) == 0,
+        predictedNodeDelta=node_delta,
+        predictedEdgeDelta=edge_delta,
+        warnings=warnings,
+    )
+
+
 def _read_text_file(rel_path: str) -> str:
     abs_path = os.path.join(FLOWY_DEEPAGENTS_DIR, rel_path)
     try:
@@ -1335,6 +1457,14 @@ def _run_builder_stage(
             last_errors = ["LLM did not return valid JSON."]
             continue
 
+        try:
+            normalized_candidate = FlowyPlanJsonModel(**candidate)
+            candidate = normalized_candidate.model_dump(exclude_none=True)
+        except Exception:
+            parsed = candidate
+            last_errors = ["builder_output_schema_invalid"]
+            continue
+
         operations = candidate.get("operations", [])
         operations = _materialize_attachment_operations(operations, attachments)
         operations = _normalize_operation_models(operations, model_catalog)
@@ -1391,6 +1521,14 @@ def main() -> None:
         if agent_mode not in {"plan", "assist"}:
             agent_mode = "assist"
         run_quality_check = bool(payload.get("runQualityCheck"))
+        enforce_canvas_control = _coerce_bool(
+            payload.get("enforceCanvasControl"),
+            default=_coerce_bool(os.environ.get("FLOWY_ENFORCE_CANVAS_CONTROL"), default=True),
+        )
+        require_caution_approval = _coerce_bool(
+            payload.get("requireCautionApproval"),
+            default=_coerce_bool(os.environ.get("FLOWY_REQUIRE_CAUTION_APPROVAL"), default=False),
+        )
 
         openai_key = os.environ.get("OPENAI_API_KEY")
         if not openai_key:
@@ -1467,18 +1605,41 @@ def main() -> None:
                 router_model, message, workflow_state, selected_node_ids, chat_history
             )
             if route and route.get("intent") == "conversation":
+                if enforce_canvas_control and agent_mode == "assist":
+                    _emit_progress("routing", "conversation route overridden by canvas-control policy")
+                else:
                 # If images are available and user asks for visual feedback,
                 # route through multimodal advisor instead of a plain router reply.
-                if attachments and _looks_like_visual_assessment_request(message):
-                    text = _run_plan_advisor_only(
-                        model, message, workflow_state, selected_node_ids, attachments, model_catalog=model_catalog, canvas_state_memory=canvas_state_memory, chat_history=chat_history
-                    )
+                    if attachments and _looks_like_visual_assessment_request(message):
+                        text = _run_plan_advisor_only(
+                            model, message, workflow_state, selected_node_ids, attachments, model_catalog=model_catalog, canvas_state_memory=canvas_state_memory, chat_history=chat_history
+                        )
+                        sys.stdout.write(
+                            json.dumps(
+                                {
+                                    "ok": True,
+                                    "mode": "chat",
+                                    "assistantText": text,
+                                    "operations": [],
+                                    "requiresApproval": False,
+                                    "approvalReason": "",
+                                    "runApprovalRequired": False,
+                                }
+                            )
+                        )
+                        return
+                    reply_text = route.get("reply")
+                    if not isinstance(reply_text, str) or not reply_text.strip():
+                        reply_text = (
+                            "Here’s a quick answer. If you want me to change the canvas, say what to add, "
+                            "connect, or run."
+                        )
                     sys.stdout.write(
                         json.dumps(
                             {
                                 "ok": True,
                                 "mode": "chat",
-                                "assistantText": text,
+                                "assistantText": reply_text.strip(),
                                 "operations": [],
                                 "requiresApproval": False,
                                 "approvalReason": "",
@@ -1487,26 +1648,6 @@ def main() -> None:
                         )
                     )
                     return
-                reply_text = route.get("reply")
-                if not isinstance(reply_text, str) or not reply_text.strip():
-                    reply_text = (
-                        "Here’s a quick answer. If you want me to change the canvas, say what to add, "
-                        "connect, or run."
-                    )
-                sys.stdout.write(
-                    json.dumps(
-                        {
-                            "ok": True,
-                            "mode": "chat",
-                            "assistantText": reply_text.strip(),
-                            "operations": [],
-                            "requiresApproval": False,
-                            "approvalReason": "",
-                            "runApprovalRequired": False,
-                        }
-                    )
-                )
-                return
 
         system_prompt = _build_system_prompt()
         decomposition, stage_index, current_stage_instruction, planner_message = _run_planner_stage(
@@ -1563,11 +1704,39 @@ def main() -> None:
             "requiresApproval": False,
             "approvalReason": "",
             "agentMode": agent_mode,
+            "enforceCanvasControl": enforce_canvas_control,
         }
         out["debugLastText"] = last_text_debug
+        out["capabilityRegistry"] = _build_capability_registry(workflow_state, selected_node_ids).model_dump()
         if parsed.get("executeNodeIds") is not None:
             out["executeNodeIds"] = parsed.get("executeNodeIds")
-        out["runApprovalRequired"] = agent_mode == "assist"
+        risk_summary = _summarize_operation_risks(out.get("operations"))
+        destructive_approval_required = _operations_require_manual_approval(out.get("operations"))
+        caution_present = risk_summary.get("caution", 0) > 0
+        out["requiresApproval"] = destructive_approval_required or (require_caution_approval and caution_present)
+        if destructive_approval_required:
+            out["approvalReason"] = "Destructive canvas operations require manual approval."
+        elif require_caution_approval and caution_present:
+            out["approvalReason"] = "Caution-tier operations require manual approval by policy."
+        out["runApprovalRequired"] = bool(parsed.get("runApprovalRequired")) if parsed.get("runApprovalRequired") is not None else (agent_mode == "assist")
+        out["safetyPolicy"] = {
+            "riskSummary": risk_summary,
+            "requireCautionApproval": require_caution_approval,
+            "destructiveRequiresApproval": True,
+        }
+        out["postApplyCheck"] = _build_post_apply_verification(
+            workflow_state=workflow_state,
+            operations=out.get("operations"),
+        ).model_dump()
+        out["telemetry"] = {
+            "routerBypassed": skip_router,
+            "agentMode": agent_mode,
+            "operationCount": len(out.get("operations") or []),
+            "selectedNodeCount": len(selected_node_ids),
+            "attachmentsCount": len(attachments),
+            "validationOk": bool(ok),
+            "qualityCheckRequested": bool(run_quality_check),
+        }
         if not ok:
             out["error"] = parsed.get("error", "deep_agent_planning_failed")
 

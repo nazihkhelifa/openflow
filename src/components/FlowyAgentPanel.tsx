@@ -30,14 +30,18 @@ import {
   loadCanvasStateMemory,
   loadCustomInstructions,
   loadDockedPreference,
+  loadEnforceCanvasControl,
   loadFlowyAgentMode,
   loadFlowyPanelSessions,
+  loadRequireCautionApproval,
   loadStyleMemory,
   saveCanvasStateMemory,
   saveCustomInstructions,
   saveDockedPreference,
+  saveEnforceCanvasControl,
   saveFlowyAgentMode,
   saveFlowyPanelSessions,
+  saveRequireCautionApproval,
   saveStyleMemory,
   styleMemoryToPromptContext,
   updateStyleMemoryEntry,
@@ -119,6 +123,27 @@ type FlowyPlanResponse = {
   approvalReason?: string;
   executeNodeIds?: string[];
   runApprovalRequired?: boolean;
+  enforceCanvasControl?: boolean;
+  safetyPolicy?: {
+    riskSummary?: { safe?: number; caution?: number; destructive?: number };
+    requireCautionApproval?: boolean;
+    destructiveRequiresApproval?: boolean;
+  };
+  postApplyCheck?: {
+    ok?: boolean;
+    predictedNodeDelta?: number;
+    predictedEdgeDelta?: number;
+    warnings?: string[];
+  };
+  telemetry?: {
+    routerBypassed?: boolean;
+    agentMode?: string;
+    operationCount?: number;
+    selectedNodeCount?: number;
+    attachmentsCount?: number;
+    validationOk?: boolean;
+    qualityCheckRequested?: boolean;
+  };
   /** `chat` = conversational reply only (no canvas ops). `plan` = edit operations (may be empty). */
   mode?: "chat" | "plan";
   decomposition?: DecompositionInfo;
@@ -587,6 +612,8 @@ export function FlowyAgentPanel({
   const [flowyAgentMode, setFlowyAgentMode] = useState<FlowyAgentMode>(() => loadFlowyAgentMode());
   const flowyAgentModeRef = useRef(flowyAgentMode);
   flowyAgentModeRef.current = flowyAgentMode;
+  const [enforceCanvasControl, setEnforceCanvasControl] = useState<boolean>(() => loadEnforceCanvasControl());
+  const [requireCautionApproval, setRequireCautionApproval] = useState<boolean>(() => loadRequireCautionApproval());
   const footerInputId = useId();
 
   const [isDocked, setIsDocked] = useState<boolean>(() => loadDockedPreference());
@@ -702,6 +729,14 @@ export function FlowyAgentPanel({
   useEffect(() => {
     saveFlowyAgentMode(flowyAgentMode);
   }, [flowyAgentMode]);
+
+  useEffect(() => {
+    saveEnforceCanvasControl(enforceCanvasControl);
+  }, [enforceCanvasControl]);
+
+  useEffect(() => {
+    saveRequireCautionApproval(requireCautionApproval);
+  }, [requireCautionApproval]);
 
   useEffect(() => {
     if (!historyMenuOpen) return;
@@ -931,6 +966,8 @@ export function FlowyAgentPanel({
           attachments: dedupedAttachments,
           modelCatalog,
           canvasStateMemory,
+          enforceCanvasControl,
+          requireCautionApproval,
         };
         if (opts?.stageIndex !== undefined) body.stageIndex = opts.stageIndex;
         if (opts?.decompositionStages) body.decompositionStages = opts.decompositionStages;
@@ -1052,6 +1089,17 @@ export function FlowyAgentPanel({
           const qcSummary = `\n\n**Quality check** ${verdictEmoji} ${qc.verdict} (${Math.round(qc.confidence * 100)}%): ${qc.assessment}`;
           displayText += qcSummary;
         }
+        if (data.safetyPolicy?.riskSummary) {
+          const rs = data.safetyPolicy.riskSummary;
+          const safetySummary =
+            `\n\n**Safety policy**: safe=${rs.safe ?? 0}, caution=${rs.caution ?? 0}, destructive=${rs.destructive ?? 0}` +
+            (data.requiresApproval && data.approvalReason ? ` · approval: ${data.approvalReason}` : "");
+          displayText += safetySummary;
+        }
+        if (data.postApplyCheck && data.postApplyCheck.ok === false) {
+          const warn = (data.postApplyCheck.warnings ?? []).join(", ") || "post-apply verification warning";
+          displayText += `\n\n**Post-apply check**: ${warn}`;
+        }
 
         if (mode === "chat") {
           setPendingOperations(null);
@@ -1087,7 +1135,18 @@ export function FlowyAgentPanel({
         setPlannerStageEvent(null);
       }
     },
-    [contextNodeIds, customInstructions, imageAttachments, isPlanning, scrollToBottom, stateForRequest, updateSessionMessages, canvasStateMemory]
+    [
+      contextNodeIds,
+      customInstructions,
+      imageAttachments,
+      isPlanning,
+      scrollToBottom,
+      stateForRequest,
+      updateSessionMessages,
+      canvasStateMemory,
+      enforceCanvasControl,
+      requireCautionApproval,
+    ]
   );
 
   const handlePlan = useCallback(async () => {
@@ -1785,36 +1844,65 @@ export function FlowyAgentPanel({
           )
         )}
 
-        {(activeDecomposition && activeDecomposition.totalStages > 1) || plannerStageEvent ? (
-          <div className="mx-4 my-2 rounded-xl border border-purple-800/40 bg-purple-950/20 px-3 py-2">
-            <div className="flex items-center gap-2 text-[11px] text-purple-200">
+        {(activeDecomposition && activeDecomposition.totalStages > 0) || plannerStageEvent ? (
+          <div className="mx-4 my-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+            <div className="mb-2 flex items-center gap-2 text-[11px] text-neutral-200">
               <Sparkles className="size-3 shrink-0" aria-hidden />
               <span className="font-medium">
-                {activeDecomposition && activeDecomposition.totalStages > 1
-                  ? `Stage ${activeDecomposition.currentStageIndex + 1}/${activeDecomposition.totalStages}`
+                {activeDecomposition && activeDecomposition.totalStages > 0
+                  ? `Todo stages (${activeDecomposition.currentStageIndex + 1}/${activeDecomposition.totalStages})`
                   : (plannerStageEvent?.stageTitle || "Planning")}
               </span>
-              <span className="text-purple-300/70">
-                {plannerStageEvent?.detail ||
-                  (activeDecomposition
-                    ? activeDecomposition.stages[activeDecomposition.currentStageIndex]?.title ?? ""
-                    : "")}
-              </span>
             </div>
-            {activeDecomposition && activeDecomposition.totalStages > 1 && (
-              <div className="mt-1.5 flex gap-1">
-                {activeDecomposition.stages.map((s, i) => (
-                  <div
-                    key={s.id}
-                    className={`h-1 flex-1 rounded-full transition-colors ${
-                      i < activeDecomposition.currentStageIndex
-                        ? "bg-purple-400"
-                        : i === activeDecomposition.currentStageIndex
-                          ? "bg-purple-400 animate-pulse"
-                          : "bg-white/10"
-                    }`}
-                  />
-                ))}
+            {activeDecomposition && activeDecomposition.totalStages > 0 ? (
+              <div className="space-y-1.5">
+                {activeDecomposition.stages.map((s, i) => {
+                  const done = i < activeDecomposition.currentStageIndex;
+                  const current = i === activeDecomposition.currentStageIndex;
+                  return (
+                    <div
+                      key={s.id}
+                      className={`flex items-start gap-2 rounded-lg border px-2 py-1.5 ${
+                        current
+                          ? "border-blue-500/40 bg-blue-500/10"
+                          : done
+                            ? "border-emerald-500/30 bg-emerald-500/10"
+                            : "border-white/10 bg-black/20"
+                      }`}
+                    >
+                      <div className="mt-0.5 shrink-0">
+                        {done ? (
+                          <Check className="size-3.5 text-emerald-300" aria-hidden />
+                        ) : (
+                          <Circle className={`size-3.5 ${current ? "text-blue-300" : "text-neutral-500"}`} aria-hidden />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div
+                          className={`text-[11px] font-medium ${
+                            done
+                              ? "text-neutral-300 line-through decoration-neutral-500"
+                              : current
+                                ? "text-blue-200"
+                                : "text-neutral-300"
+                          }`}
+                        >
+                          {s.title || `Stage ${i + 1}`}
+                        </div>
+                        {s.instruction ? (
+                          <div className="mt-0.5 text-[10px] leading-snug text-neutral-400">
+                            {s.instruction}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-[11px] text-neutral-400">
+                <Circle className="size-3.5 text-blue-300" aria-hidden />
+                <span>{plannerStageEvent?.detail || plannerProgress || "Flowy is thinking..."}</span>
               </div>
             )}
           </div>
@@ -2291,6 +2379,29 @@ export function FlowyAgentPanel({
                 placeholder="Example: Prefer concise answers first; only edit canvas when I explicitly ask."
                 className="w-full min-h-[140px] bg-neutral-900/40 border border-neutral-700 rounded-xl px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-blue-500 resize-y"
               />
+              <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <div className="text-xs font-medium text-neutral-200">Agent execution policy</div>
+                <div className="mt-2 grid grid-cols-1 gap-2 text-[11px] text-neutral-300">
+                  <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-2 py-1.5">
+                    <span>Enforce canvas-control-first in Assist mode</span>
+                    <input
+                      type="checkbox"
+                      checked={enforceCanvasControl}
+                      onChange={(e) => setEnforceCanvasControl(e.target.checked)}
+                      className="h-4 w-4 accent-blue-500"
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-2 py-1.5">
+                    <span>Require approval for caution-tier edits</span>
+                    <input
+                      type="checkbox"
+                      checked={requireCautionApproval}
+                      onChange={(e) => setRequireCautionApproval(e.target.checked)}
+                      className="h-4 w-4 accent-blue-500"
+                    />
+                  </label>
+                </div>
+              </div>
               <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>

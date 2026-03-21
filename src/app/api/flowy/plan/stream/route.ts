@@ -18,6 +18,8 @@ type PlanRequest = {
   stageIndex?: number;
   decompositionStages?: Array<Record<string, unknown>>;
   runQualityCheck?: boolean;
+  enforceCanvasControl?: boolean;
+  requireCautionApproval?: boolean;
 };
 
 const FLOWY_VENV_HINT =
