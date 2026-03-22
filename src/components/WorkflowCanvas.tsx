@@ -1,11 +1,17 @@
 "use client";
 
-import { useCallback, useRef, useState, useEffect, DragEvent, useMemo } from "react";
+import {
+  useCallback,
+  useRef,
+  useState,
+  useEffect,
+  type MouseEvent as ReactMouseEvent,
+  DragEvent,
+  useMemo,
+} from "react";
 import {
   ReactFlow,
   Controls,
-  Background,
-  BackgroundVariant,
   NodeTypes,
   EdgeTypes,
   Connection,
@@ -46,6 +52,7 @@ import { CanvasContextMenu } from "./CanvasContextMenu";
 import { MultiSelectToolbar } from "./MultiSelectToolbar";
 import { EdgeToolbar } from "./EdgeToolbar";
 import { GroupBackgroundsPortal, GroupControlsOverlay } from "./GroupsOverlay";
+import { CursorGlowDotBackground } from "./CursorGlowDotBackground";
 import { NodeType, NanoBananaNodeData, HandleType, AnnotationNodeData } from "@/types";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import { getQuickstartDefaults, getQuickstartSystemInstructionExtra } from "@/store/utils/localStorage";
@@ -229,6 +236,11 @@ export function WorkflowCanvas() {
   const [expandingNode, setExpandingNode] = useState<{ id: string; type: string } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId?: string } | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  /** Matches visible graph area (excludes RunActionBar); required for dot grid / spotlight math */
+  const reactFlowRootRef = useRef<HTMLDivElement>(null);
+  /** Local coords inside flow area — same as SpotlightCanvas `clientX/Y - rect` */
+  const [spotlightMouse, setSpotlightMouse] = useState({ x: -1000, y: -1000 });
+  const flowSpotlightContainerRef = useRef<HTMLDivElement>(null);
 
   // Detect if canvas is empty for showing quickstart
   const isCanvasEmpty = nodes.length === 0;
@@ -1020,6 +1032,16 @@ export function WorkflowCanvas() {
     setContextMenu({ x: e.clientX, y: e.clientY, nodeId });
   }, []);
 
+  const handleSpotlightMouseMove = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    const el = flowSpotlightContainerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setSpotlightMouse({
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    });
+  }, []);
+
   // Get copy/paste functions and clipboard from store
   const copySelectedNodes = useWorkflowStore((state) => state.copySelectedNodes);
   const pasteNodes = useWorkflowStore((state) => state.pasteNodes);
@@ -1631,7 +1653,7 @@ export function WorkflowCanvas() {
   return (
     <div
       ref={reactFlowWrapper}
-      className={`flex-1 bg-canvas-bg relative ${isDragOver ? "ring-2 ring-inset ring-blue-500" : ""}`}
+      className={`flex flex-col flex-1 min-h-0 bg-canvas-bg relative ${isDragOver ? "ring-2 ring-inset ring-blue-500" : ""}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -1667,7 +1689,14 @@ export function WorkflowCanvas() {
         />
       )}
 
-      <ReactFlow
+      <div
+        ref={flowSpotlightContainerRef}
+        className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        onMouseMove={handleSpotlightMouseMove}
+      >
+        <CursorGlowDotBackground mousePosition={spotlightMouse} />
+        <ReactFlow
+        ref={reactFlowRootRef}
         nodes={allNodes}
         edges={edges}
         onNodesChange={onNodesChange}
@@ -1716,18 +1745,12 @@ export function WorkflowCanvas() {
         nodesDraggable={!isModalOpen}
         nodesConnectable={!isModalOpen}
         elementsSelectable={!isModalOpen}
-        className="bg-neutral-900"
+        className="relative z-[2] !bg-transparent flex-1 min-h-0 min-w-0"
+        style={{ zIndex: 2 }}
+        colorMode="dark"
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={defaultEdgeOptions}
       >
-        <Background
-          id="workflow-canvas-dots"
-          variant={BackgroundVariant.Dots}
-          gap={20}
-          size={1.35}
-          color="rgb(255 255 255 / 0.28)"
-          bgColor="transparent"
-        />
         <SharedEdgeGradients />
         <GroupBackgroundsPortal />
         <GroupControlsOverlay />
@@ -1760,6 +1783,7 @@ export function WorkflowCanvas() {
           })}
         </ViewportPortal>
       </ReactFlow>
+      </div>
 
       <RunActionBar />
 

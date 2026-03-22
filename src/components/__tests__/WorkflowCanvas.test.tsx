@@ -173,15 +173,14 @@ describe("WorkflowCanvas", () => {
       expect(document.querySelector(".react-flow")).toBeInTheDocument();
     });
 
-    it("should render Background component", () => {
+    it("should render spotlight dot canvas layer", () => {
       render(
         <TestWrapper>
           <WorkflowCanvas />
         </TestWrapper>
       );
 
-      // Background pattern should be rendered
-      expect(document.querySelector(".react-flow__background")).toBeInTheDocument();
+      expect(document.querySelector('[data-testid="openflow-cursor-glow-layer"]')).toBeInTheDocument();
     });
 
     it("should render Controls component", () => {

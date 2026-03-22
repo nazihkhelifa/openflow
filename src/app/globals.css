@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 @theme {
-  --color-canvas-bg: #000000;
+  --color-canvas-bg: #0f0f0f;
 }
 
 :root {
-  --background: #0a0a0a;
+  --background: #0f0f0f;
   --foreground: #fafafa;
   --background-transparent-black-default: #202020e6;
   --color-greyscale-300: #c4c4c4;
@@ -42,6 +42,22 @@ body {
   /* Prevent browser back/forward swipe navigation when panning */
   overscroll-behavior-x: none;
   touch-action: none;
+}
+
+/* Let custom dot canvas show through the pane (light + dark; pane must stay transparent) */
+.react-flow__renderer,
+.react-flow__pane {
+  background-color: transparent !important;
+}
+
+.react-flow.light .react-flow__renderer,
+.react-flow.light .react-flow__pane {
+  background-color: transparent !important;
+}
+
+/* Canvas draws dots; RF’s .react-flow__background defaults to a fill in dark mode */
+.react-flow__background.openflow-cursor-dot-glow {
+  background-color: transparent !important;
 }
 
 /* Checker pattern for video/image transparency (alpha background) */
