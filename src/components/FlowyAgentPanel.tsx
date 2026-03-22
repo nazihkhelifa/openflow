@@ -846,7 +846,12 @@ export function FlowyAgentPanel({
     y: 0,
     visible: true,
   });
-  useEffect(() => {
+  /** Latest screen coords for spotlight math (ResizeObserver must not use stale cursor). */
+  const agentSpotlightCursorRef = useRef(cursor);
+  agentSpotlightCursorRef.current = cursor;
+  const updateAgentSpotlightForCanvasRef = useRef<(() => void) | null>(null);
+
+  useLayoutEffect(() => {
     if (!onAgentSpotlightPositionChange) return;
     if (!isPlanning) {
       onAgentSpotlightPositionChange(null);
@@ -857,12 +862,60 @@ export function FlowyAgentPanel({
       onAgentSpotlightPositionChange(null);
       return;
     }
-    const rect = el.getBoundingClientRect();
-    onAgentSpotlightPositionChange({
-      x: cursor.x - rect.left,
-      y: cursor.y - rect.top,
-    });
-  }, [isPlanning, cursor.x, cursor.y, spotlightContainerRef, onAgentSpotlightPositionChange]);
+
+    const SPOTLIGHT_PAD = 40;
+    const EDGE_PAD = 48;
+
+    const compute = () => {
+      if (!onAgentSpotlightPositionChange) return;
+      const node = spotlightContainerRef?.current;
+      if (!node) {
+        onAgentSpotlightPositionChange(null);
+        return;
+      }
+      const c = agentSpotlightCursorRef.current;
+      const r = node.getBoundingClientRect();
+      const w = r.width;
+      const h = r.height;
+      if (w <= 0 || h <= 0) return;
+
+      const lx = c.x - r.left;
+      const ly = c.y - r.top;
+      const near =
+        lx >= -SPOTLIGHT_PAD &&
+        lx <= w + SPOTLIGHT_PAD &&
+        ly >= -SPOTLIGHT_PAD &&
+        ly <= h + SPOTLIGHT_PAD;
+      const degenerate = c.x === 0 && c.y === 0;
+
+      const x =
+        degenerate || !near ? w * 0.5 : Math.min(w - EDGE_PAD, Math.max(EDGE_PAD, lx));
+      const y =
+        degenerate || !near ? h * 0.5 : Math.min(h - EDGE_PAD, Math.max(EDGE_PAD, ly));
+
+      onAgentSpotlightPositionChange({ x, y });
+    };
+
+    updateAgentSpotlightForCanvasRef.current = compute;
+    compute();
+
+    const ro = new ResizeObserver(() => compute());
+    ro.observe(el);
+    window.addEventListener("scroll", compute, true);
+    window.addEventListener("resize", compute);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("scroll", compute, true);
+      window.removeEventListener("resize", compute);
+      updateAgentSpotlightForCanvasRef.current = null;
+    };
+  }, [isPlanning, spotlightContainerRef, onAgentSpotlightPositionChange]);
+
+  useEffect(() => {
+    if (!isPlanning) return;
+    updateAgentSpotlightForCanvasRef.current?.();
+  }, [isPlanning, cursor.x, cursor.y]);
   const [clickRipple, setClickRipple] = useState<{ x: number; y: number; id: number } | null>(null);
   const cursorPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isExecutingStep, setIsExecutingStep] = useState(false);

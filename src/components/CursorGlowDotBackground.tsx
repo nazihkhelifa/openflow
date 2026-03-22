@@ -74,8 +74,13 @@ function SpotlightDots({
       }
 
       if (agentSpotlightActive) {
-        const ax = agentSpotlightPosition?.x ?? canvas.width * 0.5;
-        const ay = agentSpotlightPosition?.y ?? canvas.height * 0.5;
+        const pad = AGENT_SPOTLIGHT_RADIUS;
+        let ax = agentSpotlightPosition?.x ?? canvas.width * 0.5;
+        let ay = agentSpotlightPosition?.y ?? canvas.height * 0.5;
+        if (canvas.width > 0 && canvas.height > 0) {
+          ax = Math.min(canvas.width - pad, Math.max(pad, ax));
+          ay = Math.min(canvas.height - pad, Math.max(pad, ay));
+        }
         ctx.globalCompositeOperation = "lighter";
         for (let x = 0; x < canvas.width; x += GAP) {
           for (let y = 0; y < canvas.height; y += GAP) {
