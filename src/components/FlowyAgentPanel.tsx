@@ -689,14 +689,14 @@ function AppliedPlanWidget({ plan }: { plan: AppliedPlanRecord }) {
         onClick={() => setIsExpanded((v) => !v)}
         className="group flex w-fit cursor-pointer items-center gap-1.5 rounded-lg py-0.5 text-left transition-colors hover:opacity-90"
       >
-        <div className="flex size-5 shrink-0 items-center justify-center text-emerald-400/70">
+        <div className="flex size-5 shrink-0 items-center justify-center text-violet-400/75">
           <SquarePlus className="size-3" strokeWidth={2} aria-hidden />
         </div>
-        <span className="text-[11px] font-medium text-emerald-400/80">
+        <span className="text-[11px] font-medium text-violet-300/90">
           {plan.operations.length} operation{plan.operations.length !== 1 ? "s" : ""} applied
         </span>
         {plan.executedNodeIds && plan.executedNodeIds.length > 0 && (
-          <span className="text-[10px] text-emerald-400/50">
+          <span className="text-[10px] text-violet-400/50">
             + {plan.executedNodeIds.length} executed
           </span>
         )}
@@ -710,7 +710,7 @@ function AppliedPlanWidget({ plan }: { plan: AppliedPlanRecord }) {
         <div className="ml-2 mt-1 border-l border-white/10 pl-3 pb-1">
           {plan.operations.map((desc, i) => (
             <div key={i} className="flex items-start gap-1.5 py-0.5">
-              <div className="mt-[5px] size-1.5 shrink-0 rounded-full bg-emerald-500/50" />
+              <div className="mt-[5px] size-1.5 shrink-0 rounded-full bg-violet-400/55" />
               <span className="text-[11px] leading-snug text-neutral-400">{desc}</span>
             </div>
           ))}
@@ -890,8 +890,13 @@ export function FlowyAgentPanel({
   const [plannerTimelineOpen, setPlannerTimelineOpen] = useState(true);
   /** Expanded long user bubbles (message id) — collapsed by default. */
   const [expandedUserMessageIds, setExpandedUserMessageIds] = useState(() => new Set<string>());
+  const [expandedFlowyStageIds, setExpandedFlowyStageIds] = useState(() => new Set<string>());
+  /** Whole decomposition checklist card — expanded shows all rows; collapsed shows a short summary. */
+  const [flowyDecompositionSectionOpen, setFlowyDecompositionSectionOpen] = useState(true);
   useEffect(() => {
     setExpandedUserMessageIds(new Set());
+    setExpandedFlowyStageIds(new Set());
+    setFlowyDecompositionSectionOpen(true);
   }, [activeSessionId]);
   const [cursor, setCursor] = useState<{ x: number; y: number; visible: boolean }>({
     x: 0,
@@ -2830,7 +2835,43 @@ export function FlowyAgentPanel({
             aria-busy={isPlanning}
           >
             {activeDecomposition && activeDecomposition.totalStages > 0 ? (
-              <div className="space-y-1.5">
+              <div className="flex flex-col">
+                <button
+                  type="button"
+                  className="group/deco -mx-0.5 mb-1.5 flex w-[calc(100%+4px)] items-center gap-1.5 rounded-lg px-0.5 py-1 text-left outline-none transition-colors hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-violet-400/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgb(22,23,24)]"
+                  onClick={() => setFlowyDecompositionSectionOpen((o) => !o)}
+                  aria-expanded={flowyDecompositionSectionOpen}
+                  aria-controls={flowyDecompositionSectionOpen ? "flowy-decomposition-stages" : undefined}
+                  id="flowy-decomposition-section-toggle"
+                  aria-label={
+                    flowyDecompositionSectionOpen ? "Collapse plan stages list" : "Expand plan stages list"
+                  }
+                >
+                  <span
+                    className={`flex size-5 shrink-0 items-center justify-center text-neutral-500 transition-transform duration-200 ${
+                      flowyDecompositionSectionOpen ? "rotate-90" : ""
+                    }`}
+                    aria-hidden
+                  >
+                    <ChevronRight className="size-3.5" strokeWidth={2} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-violet-300/90">Plan stages</div>
+                    <div className="truncate text-[11px] text-neutral-400">
+                      {activeDecomposition.currentStageIndex + 1}/{activeDecomposition.totalStages}
+                      {activeDecomposition.stages[activeDecomposition.currentStageIndex]?.title
+                        ? ` · ${activeDecomposition.stages[activeDecomposition.currentStageIndex].title}`
+                        : ""}
+                    </div>
+                  </div>
+                </button>
+                {flowyDecompositionSectionOpen ? (
+                  <div
+                    id="flowy-decomposition-stages"
+                    role="region"
+                    aria-labelledby="flowy-decomposition-section-toggle"
+                    className="space-y-1.5"
+                  >
                 {activeDecomposition.stages.map((s, i) => {
                   const markFinalStageDone =
                     !isPlanning && Boolean(activeDecomposition.isLastStage);
@@ -2838,52 +2879,80 @@ export function FlowyAgentPanel({
                     i < activeDecomposition.currentStageIndex ||
                     (markFinalStageDone && i === activeDecomposition.currentStageIndex);
                   const current = i === activeDecomposition.currentStageIndex && !done;
+                  const hasInstruction = Boolean(s.instruction?.trim());
+                  const stageExpanded = expandedFlowyStageIds.has(s.id);
+                  const rowShell = `flex items-start gap-2 rounded-lg border px-2 py-1.5 ${
+                    current
+                      ? "border-blue-500/40 bg-blue-500/10"
+                      : done
+                        ? "border-violet-500/35 bg-violet-500/10"
+                        : "border-white/10 bg-black/20"
+                  }`;
+                  const titleClass = `text-[11px] font-medium ${
+                    done
+                      ? "text-neutral-300 line-through decoration-neutral-500"
+                      : current
+                        ? "text-blue-200"
+                        : "text-neutral-300"
+                  }`;
+                  const toggleStageExpand = () => {
+                    setExpandedFlowyStageIds((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(s.id)) next.delete(s.id);
+                      else next.add(s.id);
+                      return next;
+                    });
+                  };
                   return (
-                    <div
-                      key={s.id}
-                      className={`flex items-start gap-2 rounded-lg border px-2 py-1.5 ${
-                        current
-                          ? "border-blue-500/40 bg-blue-500/10"
-                          : done
-                            ? "border-emerald-500/30 bg-emerald-500/10"
-                            : "border-white/10 bg-black/20"
-                      }`}
-                    >
+                    <div key={s.id} className={rowShell}>
                       <div className="mt-0.5 shrink-0">
                         {done ? (
-                          <Check className="size-3.5 text-emerald-300" aria-hidden />
+                          <Check className="size-3.5 text-violet-300" aria-hidden />
                         ) : (
                           <Circle className={`size-3.5 ${current ? "text-blue-300" : "text-neutral-500"}`} aria-hidden />
                         )}
                       </div>
-                      <div className="min-w-0">
-                        <div
-                          className={`text-[11px] font-medium ${
-                            done
-                              ? "text-neutral-300 line-through decoration-neutral-500"
-                              : current
-                                ? "text-blue-200"
-                                : "text-neutral-300"
-                          }`}
+                      {hasInstruction ? (
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgb(22,23,24)] rounded-md -m-0.5 p-0.5"
+                          onClick={toggleStageExpand}
+                          aria-expanded={stageExpanded}
+                          aria-label={stageExpanded ? "Collapse stage details" : "Expand stage details"}
                         >
-                          {s.title || `Stage ${i + 1}`}
-                        </div>
-                        {s.instruction ? (
-                          <div className="mt-0.5 text-[10px] leading-snug text-neutral-400">
-                            {s.instruction}
+                          <div className="flex items-start gap-1.5">
+                            <div className="min-w-0 flex-1">
+                              <div className={titleClass}>{s.title || `Stage ${i + 1}`}</div>
+                              {stageExpanded ? (
+                                <div className="mt-0.5 text-[10px] leading-snug text-neutral-400">{s.instruction}</div>
+                              ) : null}
+                            </div>
+                            <span className="mt-0.5 shrink-0 text-neutral-500" aria-hidden>
+                              {stageExpanded ? (
+                                <ChevronDown className="size-3.5" strokeWidth={2} />
+                              ) : (
+                                <ChevronRight className="size-3.5" strokeWidth={2} />
+                              )}
+                            </span>
                           </div>
-                        ) : null}
-                      </div>
+                        </button>
+                      ) : (
+                        <div className="min-w-0 flex-1">
+                          <div className={titleClass}>{s.title || `Stage ${i + 1}`}</div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="flex items-start gap-2.5 text-[11px] leading-snug text-neutral-400">
                 {isPlanning || plannerStageEvent != null ? (
                   <Loader2 className="mt-0.5 size-3.5 shrink-0 animate-spin text-blue-300" aria-hidden />
                 ) : (
-                  <Check className="mt-0.5 size-3.5 shrink-0 text-emerald-400/90" aria-hidden />
+                  <Check className="mt-0.5 size-3.5 shrink-0 text-purple-400/90" aria-hidden />
                 )}
                 <span className="min-w-0 text-neutral-300/90">
                   {plannerStageEvent?.detail?.trim() ||
@@ -2939,7 +3008,7 @@ export function FlowyAgentPanel({
                     <div className="select-none pt-1.5">
                       <div className="mb-3 flex flex-wrap items-center gap-2 px-0.5">
                         <span className="text-[10px] uppercase tracking-wide text-neutral-500">Apply</span>
-                        <span className="rounded-lg px-2 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-300">
+                        <span className="rounded-lg px-2 py-0.5 text-[11px] font-medium bg-violet-500/15 text-violet-300">
                           Auto
                         </span>
                       </div>
@@ -2970,7 +3039,7 @@ export function FlowyAgentPanel({
                           status === "next"
                             ? "flowy-shimmer-text text-xs leading-tight"
                             : status === "done"
-                              ? "text-xs leading-tight text-emerald-400/70"
+                              ? "text-xs leading-tight text-violet-400/75"
                               : "text-xs leading-tight text-neutral-500";
                         const StepIcon =
                           status === "done"
@@ -2980,7 +3049,7 @@ export function FlowyAgentPanel({
                               : Circle;
                         const iconClass =
                           status === "done"
-                            ? "size-3.5 text-emerald-400"
+                            ? "size-3.5 text-violet-400"
                             : status === "next"
                               ? "size-3.5 text-purple-400 animate-spin"
                               : "size-2.5 text-neutral-600";
@@ -3131,7 +3200,7 @@ export function FlowyAgentPanel({
                       className={`flex h-7 shrink-0 items-center gap-1.5 rounded-xl border px-2.5 text-[11px] font-medium backdrop-blur-md transition-[filter] ${
                         isRunning
                           ? "border-neutral-300 bg-white text-neutral-900 shadow-sm hover:bg-neutral-100"
-                          : "border-emerald-400/30 bg-emerald-500/[0.14] text-emerald-300 hover:brightness-125"
+                          : "border-violet-400/35 bg-violet-500/[0.14] text-violet-300 hover:brightness-125"
                       }`}
                     >
                       {isRunning ? (
@@ -3148,7 +3217,7 @@ export function FlowyAgentPanel({
                     <button
                       type="button"
                       onClick={dismissPendingPlan}
-                      className="flex h-7 shrink-0 items-center gap-1 rounded-xl border border-emerald-400/30 bg-emerald-500/[0.14] px-2.5 text-[11px] font-medium text-emerald-300 backdrop-blur-md transition-[filter] hover:brightness-125"
+                      className="flex h-7 shrink-0 items-center gap-1 rounded-xl border border-violet-400/35 bg-violet-500/[0.14] px-2.5 text-[11px] font-medium text-violet-300 backdrop-blur-md transition-[filter] hover:brightness-125"
                     >
                       Done
                     </button>
