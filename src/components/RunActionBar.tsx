@@ -72,13 +72,19 @@ export function RunActionBar() {
   const iconButtonClass =
     "inline-flex items-center justify-center h-10 w-10 shrink-0 rounded-lg text-[var(--color-greyscale-400)] transition-all duration-300 hover:bg-white/5 hover:text-[var(--color-text-1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50 disabled:pointer-events-none disabled:opacity-50";
 
+  const keepBarVisible = runMenuOpen || isRunning;
+
   return (
     <div
-      className="absolute bottom-3 left-[52px] z-[30] flex items-end min-h-[52px] min-w-[140px] pointer-events-none"
+      className="group pointer-events-auto absolute top-3 left-1/2 z-[30] flex min-h-[44px] min-w-[160px] -translate-x-1/2 flex-col items-center justify-start px-10 pb-2 pt-1"
       data-id="run-action-bar"
     >
       <div
-        className="pointer-events-auto flex items-center gap-0.5 rounded-lg p-1.5 backdrop-blur-[16px]"
+        className={`flex items-center gap-0.5 rounded-lg p-1.5 backdrop-blur-[16px] transition-opacity duration-200 ${
+          keepBarVisible
+            ? "opacity-100"
+            : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+        }`}
         style={{ backgroundColor: "var(--background-transparent-black-default)" }}
       >
         <div className="relative flex items-center" ref={runMenuRef}>
@@ -112,7 +118,7 @@ export function RunActionBar() {
           )}
 
           {runMenuOpen && !isRunning && (
-            <div className="absolute bottom-full left-0 mb-2 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-[180px] z-[100]">
+            <div className="absolute left-0 top-full z-[100] mt-2 min-w-[180px] overflow-hidden rounded-lg border border-neutral-700 bg-neutral-800 shadow-xl">
               <button
                 onClick={() => { executeWorkflow(); setRunMenuOpen(false); }}
                 className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2"
