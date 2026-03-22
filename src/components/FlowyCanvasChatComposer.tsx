@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, type RefObject } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import { AtSign, Paperclip, X } from "lucide-react";
 import {
   FLOWY_PLANNER_LLM_OPTIONS,
@@ -47,9 +47,9 @@ export type FlowyCanvasChatComposerProps = {
   plannerLlm: FlowyPlannerLlmChoice;
   onPlannerLlmChange: (choice: FlowyPlannerLlmChoice) => void;
   onOpenNodePicker: () => void;
-  /** When false, thread list is hidden — hint points to bottom-left threads button. */
-  historyRailVisible?: boolean;
 };
+
+const FLOWY_COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 200;
 
 export function FlowyCanvasChatComposer({
   textareaId,
@@ -73,11 +73,18 @@ export function FlowyCanvasChatComposer({
   plannerLlm,
   onPlannerLlmChange,
   onOpenNodePicker,
-  historyRailVisible = true,
 }: FlowyCanvasChatComposerProps) {
   const generatedTextareaId = useId();
   const inputId = textareaId ?? generatedTextareaId;
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const modeSliderIndex = useMemo(() => (flowyAgentMode === "assist" ? 0 : 1), [flowyAgentMode]);
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "0px";
+    el.style.height = `${Math.min(el.scrollHeight, FLOWY_COMPOSER_TEXTAREA_MAX_HEIGHT_PX)}px`;
+  }, [input]);
 
   return (
     <div className="pointer-events-auto w-full max-w-[min(100vw-2rem,32rem)]">
@@ -194,6 +201,7 @@ export function FlowyCanvasChatComposer({
               Chat message
             </label>
             <textarea
+              ref={textareaRef}
               id={inputId}
               rows={1}
               value={input}
@@ -206,7 +214,7 @@ export function FlowyCanvasChatComposer({
               }}
               placeholder={chatInputPlaceholder}
               disabled={isPlanning}
-              className="max-h-[200px] min-h-[22px] w-full resize-none bg-transparent text-sm leading-snug text-neutral-100 outline-none placeholder:text-neutral-500"
+              className="min-h-[22px] max-h-[200px] w-full resize-none overflow-y-auto bg-transparent text-sm leading-snug text-neutral-100 outline-none placeholder:text-neutral-500"
             />
           </div>
           <div className="flex w-full flex-wrap items-center gap-1">
@@ -319,15 +327,6 @@ export function FlowyCanvasChatComposer({
           </div>
         </div>
       </form>
-      <p className="mt-1.5 text-center text-[10px] leading-snug text-neutral-600">
-        <span className="text-neutral-500">Flowy is experimental.</span>{" "}
-        <span className="text-neutral-600">
-          Chat = advice · Assist = build + approve run ·{" "}
-          {historyRailVisible
-            ? "Pick a thread in Agent log (menu above the pill, bottom-right) to attach its history to your next message"
-            : "Open Agent log bottom-right (next to keyboard shortcuts) to pick a thread for your next message"}
-        </span>
-      </p>
     </div>
   );
 }

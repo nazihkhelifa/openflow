@@ -2442,7 +2442,6 @@ export function FlowyAgentPanel({
               plannerLlm={plannerLlm}
               onPlannerLlmChange={setPlannerLlm}
               onOpenNodePicker={() => setIsNodePickerOpen(true)}
-              historyRailVisible={historyRailOpen}
             />,
             composerMountEl
           )
