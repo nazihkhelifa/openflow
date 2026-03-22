@@ -244,6 +244,25 @@ export function Header() {
                 Duplicate project
               </button>
               )}
+              <div className="my-1 border-t border-neutral-600/80" role="separator" aria-hidden />
+              <button
+                type="button"
+                onClick={() => {
+                  setDropdownOpen(false);
+                  setShortcutsDialogOpen(true);
+                }}
+                className="w-full px-3 py-2 text-left text-sm text-neutral-200 hover:bg-neutral-700 flex items-center gap-2"
+                title="Keyboard shortcuts (?)"
+              >
+                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75A2.25 2.25 0 014.5 4.5h15a2.25 2.25 0 012.25 2.25v10.5A2.25 2.25 0 0119.5 19.5h-15a2.25 2.25 0 01-2.25-2.25V6.75z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8" />
+                </svg>
+                <span className="min-w-0 flex-1">Keyboard shortcuts</span>
+                <kbd className="hidden shrink-0 rounded border border-neutral-600 bg-neutral-900/80 px-1.5 py-0.5 font-mono text-[10px] text-neutral-400 sm:inline">
+                  ?
+                </kbd>
+              </button>
             </div>
           )}
         </div>
@@ -314,16 +333,6 @@ export function Header() {
             />
           </button>
         ) : null}
-        <button
-          onClick={() => setShortcutsDialogOpen(true)}
-          className="p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded-full transition-colors"
-          title="Keyboard shortcuts (?)"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75A2.25 2.25 0 014.5 4.5h15a2.25 2.25 0 012.25 2.25v10.5A2.25 2.25 0 0119.5 19.5h-15a2.25 2.25 0 01-2.25-2.25V6.75z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8" />
-          </svg>
-        </button>
       </div>
 
       <KeyboardShortcutsDialog
