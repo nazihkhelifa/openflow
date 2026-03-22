@@ -290,6 +290,14 @@ interface WorkflowStore {
   shortcutsDialogOpen: boolean;
   setShortcutsDialogOpen: (open: boolean) => void;
 
+  /** Flowy agent side panel open (canvas) — synced so Header can show thread toggle. */
+  flowyAgentOpen: boolean;
+  setFlowyAgentOpen: (open: boolean) => void;
+  /** Thread list under Flowy panel — toggled from Header beside keyboard shortcuts. */
+  flowyHistoryRailOpen: boolean;
+  setFlowyHistoryRailOpen: (open: boolean) => void;
+  toggleFlowyHistoryRail: () => void;
+
   // Model search dialog actions
   setModelSearchOpen: (open: boolean, provider?: ProviderType | null) => void;
 
@@ -453,6 +461,10 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
   // Keyboard shortcuts dialog initial state
   shortcutsDialogOpen: false,
+
+  // Flowy agent UI (canvas + Header thread toggle)
+  flowyAgentOpen: false,
+  flowyHistoryRailOpen: false,
 
   // Recent models initial state
   recentModels: getRecentModels(),
@@ -1820,6 +1832,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       viewedCommentNodeIds: new Set<string>(),
       // Dismiss welcome modal after loading a workflow
       showQuickstart: false,
+      flowyAgentOpen: false,
+      flowyHistoryRailOpen: false,
     });
 
     // Clear snapshot unless explicitly preserving (e.g., AI workflow generation)
@@ -1854,6 +1868,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       viewedCommentNodeIds: new Set<string>(),
       // Reset dimmed nodes
       dimmedNodeIds: new Set<string>(),
+      flowyAgentOpen: false,
+      flowyHistoryRailOpen: false,
     });
     get().clearSnapshot();
   },
@@ -2240,6 +2256,19 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   // Keyboard shortcuts dialog actions
   setShortcutsDialogOpen: (open: boolean) => {
     set({ shortcutsDialogOpen: open });
+  },
+
+  setFlowyAgentOpen: (open: boolean) => {
+    set({
+      flowyAgentOpen: open,
+      ...(!open ? { flowyHistoryRailOpen: false } : {}),
+    });
+  },
+  setFlowyHistoryRailOpen: (open: boolean) => {
+    set({ flowyHistoryRailOpen: open });
+  },
+  toggleFlowyHistoryRail: () => {
+    set((s) => ({ flowyHistoryRailOpen: !s.flowyHistoryRailOpen }));
   },
 
   // Model search dialog actions

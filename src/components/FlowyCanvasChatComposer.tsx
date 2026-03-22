@@ -47,6 +47,8 @@ export type FlowyCanvasChatComposerProps = {
   plannerLlm: FlowyPlannerLlmChoice;
   onPlannerLlmChange: (choice: FlowyPlannerLlmChoice) => void;
   onOpenNodePicker: () => void;
+  /** When false, thread list is hidden — hint points to bottom-left threads button. */
+  historyRailVisible?: boolean;
 };
 
 export function FlowyCanvasChatComposer({
@@ -71,6 +73,7 @@ export function FlowyCanvasChatComposer({
   plannerLlm,
   onPlannerLlmChange,
   onOpenNodePicker,
+  historyRailVisible = true,
 }: FlowyCanvasChatComposerProps) {
   const generatedTextareaId = useId();
   const inputId = textareaId ?? generatedTextareaId;
@@ -325,8 +328,10 @@ export function FlowyCanvasChatComposer({
       <p className="mt-1.5 text-center text-[10px] leading-snug text-neutral-600">
         <span className="text-neutral-500">Flowy is experimental.</span>{" "}
         <span className="text-neutral-600">
-          Chat = advice · Assist = build + approve run · Pick a thread in the panel to attach its history to your next
-          message
+          Chat = advice · Assist = build + approve run ·{" "}
+          {historyRailVisible
+            ? "Pick a thread in Agent log (menu above the pill, bottom-right) to attach its history to your next message"
+            : "Open Agent log bottom-right (next to keyboard shortcuts) to pick a thread for your next message"}
         </span>
       </p>
     </div>

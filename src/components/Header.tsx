@@ -3,8 +3,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { ChevronDown, Wand2 } from "lucide-react";
 import { useWorkflowStore, WorkflowFile } from "@/store/workflowStore";
 import { useShallow } from "zustand/shallow";
+import {
+  FLOWY_AGENT_LOG_THREADS_MENU_ID,
+  useFlowyAgentLogAnchorRef,
+} from "@/providers/flowy-agent-log-anchor";
 import { ProjectSetupModal } from "./ProjectSetupModal";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { GlobalImageHistory } from "./GlobalImageHistory";
@@ -26,6 +31,11 @@ export function Header() {
     shortcutsDialogOpen,
     setShortcutsDialogOpen,
     setShowQuickstart,
+    flowyAgentOpen,
+    flowyHistoryRailOpen,
+    setFlowyAgentOpen,
+    setFlowyHistoryRailOpen,
+    toggleFlowyHistoryRail,
   } = useWorkflowStore(useShallow((state) => ({
     workflowName: state.workflowName,
     workflowId: state.workflowId,
@@ -42,6 +52,11 @@ export function Header() {
     shortcutsDialogOpen: state.shortcutsDialogOpen,
     setShortcutsDialogOpen: state.setShortcutsDialogOpen,
     setShowQuickstart: state.setShowQuickstart,
+    flowyAgentOpen: state.flowyAgentOpen,
+    flowyHistoryRailOpen: state.flowyHistoryRailOpen,
+    setFlowyAgentOpen: state.setFlowyAgentOpen,
+    setFlowyHistoryRailOpen: state.setFlowyHistoryRailOpen,
+    toggleFlowyHistoryRail: state.toggleFlowyHistoryRail,
   })));
 
   const [showProjectModal, setShowProjectModal] = useState(false);
@@ -51,6 +66,7 @@ export function Header() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
   const isProjectPage = pathname?.startsWith("/projects/") && pathname !== "/projects";
+  const flowyAgentLogAnchorRef = useFlowyAgentLogAnchorRef();
 
   const isProjectConfigured = !!workflowName;
   const canSave = !!(workflowId && workflowName && saveDirectoryPath);
@@ -128,6 +144,15 @@ export function Header() {
   }, [revertToSnapshot]);
 
   const projectDisplayName = isProjectConfigured ? workflowName : "Untitled Project";
+
+  const handleFlowyThreadsClick = useCallback(() => {
+    if (!flowyAgentOpen) {
+      setFlowyAgentOpen(true);
+      setFlowyHistoryRailOpen(true);
+    } else {
+      toggleFlowyHistoryRail();
+    }
+  }, [flowyAgentOpen, setFlowyAgentOpen, setFlowyHistoryRailOpen, toggleFlowyHistoryRail]);
 
   return (
     <>
@@ -237,8 +262,8 @@ export function Header() {
         </div>
       </div>
 
-      {/* Bottom right: image history + save status + shortcuts */}
-      <div className="absolute bottom-4 right-4 z-[50] flex items-center gap-2">
+      {/* Bottom right: image history + save status + Flowy threads + shortcuts — z above canvas / Flowy (z-40–60) */}
+      <div className="pointer-events-auto absolute bottom-4 right-4 z-[120] flex items-center gap-2">
         <GlobalImageHistory />
         <span className="text-xs text-neutral-500 px-2">
           {isProjectConfigured
@@ -249,6 +274,46 @@ export function Header() {
                 : "Not saved"
             : "Not saved"}
         </span>
+        {isProjectPage ? (
+          <button
+            ref={flowyAgentLogAnchorRef ?? undefined}
+            type="button"
+            onClick={handleFlowyThreadsClick}
+            aria-expanded={flowyAgentOpen && flowyHistoryRailOpen}
+            aria-controls={FLOWY_AGENT_LOG_THREADS_MENU_ID}
+            title={
+              !flowyAgentOpen
+                ? "Open Flowy and agent log"
+                : flowyHistoryRailOpen
+                  ? "Hide chat threads"
+                  : "Show chat threads"
+            }
+            aria-label={
+              !flowyAgentOpen
+                ? "Open Flowy and agent log"
+                : flowyHistoryRailOpen
+                  ? "Hide chat threads"
+                  : "Show chat threads"
+            }
+            className={`relative flex max-w-[min(280px,calc(100vw-8rem))] cursor-pointer items-center gap-2 overflow-hidden rounded-full border border-white/[0.15] px-4 py-2 text-left text-sm font-medium shadow-none backdrop-blur-xl transition-[color,background-color,border-color,box-shadow] duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/30 ${
+              flowyAgentOpen && flowyHistoryRailOpen
+                ? "border-white/20 bg-[rgb(22,23,24)]/90 text-neutral-100"
+                : "border-white/[0.12] bg-[rgb(22,23,24)]/50 text-neutral-200 hover:bg-neutral-800/85"
+            }`}
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-2" role="status" aria-live="polite">
+              <Wand2 className="size-4 shrink-0 text-neutral-200" strokeWidth={2} aria-hidden />
+              <span className="hidden min-w-0 truncate sm:inline">Agent log</span>
+            </div>
+            <ChevronDown
+              className={`size-[18px] shrink-0 text-neutral-400 transition-transform duration-300 ${
+                flowyAgentOpen && flowyHistoryRailOpen ? "rotate-180" : ""
+              }`}
+              strokeWidth={2}
+              aria-hidden
+            />
+          </button>
+        ) : null}
         <button
           onClick={() => setShortcutsDialogOpen(true)}
           className="p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded-full transition-colors"

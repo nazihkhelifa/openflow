@@ -141,6 +141,9 @@ const createDefaultState = (overrides = {}) => ({
   captureSnapshot: vi.fn(),
   applyEditOperations: vi.fn(() => ({ applied: 0, skipped: [] })),
   setWorkflowMetadata: vi.fn(),
+  flowyAgentOpen: false,
+  setFlowyAgentOpen: vi.fn(),
+  flowyHistoryRailOpen: false,
   ...overrides,
 });
 

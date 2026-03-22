@@ -8,6 +8,7 @@ import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 import { FloatingActionBar } from "@/components/FloatingActionBar";
 import { AnnotationModal } from "@/components/AnnotationModal";
 import { MediaViewerProvider } from "@/providers/media-viewer";
+import { FlowyAgentLogAnchorProvider } from "@/providers/flowy-agent-log-anchor";
 import { MediaViewer } from "@/components/MediaViewer";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { getProject } from "@/lib/local-db";
@@ -110,12 +111,14 @@ export default function ProjectPage({ params }: ProjectPageProps) {
     <ReactFlowProvider>
       <MediaViewerProvider>
         {!isFileProject && <ProjectSync projectId={projectId} />}
-        <div className="h-screen flex flex-col relative">
-          <Header />
-          <WorkflowCanvas />
-          <FloatingActionBar />
-          <AnnotationModal />
-        </div>
+        <FlowyAgentLogAnchorProvider>
+          <div className="h-screen flex flex-col relative">
+            <Header />
+            <WorkflowCanvas />
+            <FloatingActionBar />
+            <AnnotationModal />
+          </div>
+        </FlowyAgentLogAnchorProvider>
         <MediaViewer />
       </MediaViewerProvider>
     </ReactFlowProvider>

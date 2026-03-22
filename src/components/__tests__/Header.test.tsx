@@ -36,6 +36,9 @@ const createDefaultState = (overrides = {}) => ({
   shortcutsDialogOpen: false,
   setShortcutsDialogOpen: vi.fn(),
   setShowQuickstart: vi.fn(),
+  flowyAgentOpen: false,
+  flowyHistoryRailOpen: false,
+  toggleFlowyHistoryRail: vi.fn(),
   ...overrides,
 });
 

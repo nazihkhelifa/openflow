@@ -216,7 +216,9 @@ export function WorkflowCanvas() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropType, setDropType] = useState<"image" | "audio" | "workflow" | "node" | null>(null);
   const [connectionDrop, setConnectionDrop] = useState<ConnectionDropState | null>(null);
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  const flowyAgentOpen = useWorkflowStore((s) => s.flowyAgentOpen);
+  const setFlowyAgentOpen = useWorkflowStore((s) => s.setFlowyAgentOpen);
+  const flowyHistoryRailOpen = useWorkflowStore((s) => s.flowyHistoryRailOpen);
   /** True while Flowy is sending canvas/workflow context to the planner (edge vignette on canvas). */
   const [isFlowyCanvasReading, setIsFlowyCanvasReading] = useState(false);
   const [flowyComposerMountEl, setFlowyComposerMountEl] = useState<HTMLDivElement | null>(null);
@@ -1795,10 +1797,10 @@ export function WorkflowCanvas() {
       <EdgeToolbar />
 
       {/* Flowy open button */}
-      {!isChatOpen && (
+      {!flowyAgentOpen && (
         <button
           type="button"
-          onClick={() => setIsChatOpen(true)}
+          onClick={() => setFlowyAgentOpen(true)}
           title="Flowy agent"
           aria-label="Open Flowy agent"
           className="fixed top-4 right-5 z-[60] inline-flex items-center justify-center h-11 w-11 rounded-full backdrop-blur-[16px] bg-background-transparent-black-default border border-neutral-700 hover:bg-neutral-800 transition-colors"
@@ -1823,8 +1825,8 @@ export function WorkflowCanvas() {
 
       {/* Flowy agent panel */}
       <FlowyAgentPanel
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
+        isOpen={flowyAgentOpen}
+        onClose={() => setFlowyAgentOpen(false)}
         onApplyEdits={handleApplyEdits}
         onRunNodeIds={handleFlowyRunNodeIds}
         onStopWorkflow={stopWorkflow}
@@ -1832,6 +1834,7 @@ export function WorkflowCanvas() {
         selectedNodeIds={selectedNodeIds}
         onCanvasReadingChange={setIsFlowyCanvasReading}
         composerMountEl={flowyComposerMountEl}
+        historyRailOpen={flowyHistoryRailOpen}
       />
 
       {/* Control panel - renders on right side when a configurable node is selected */}
