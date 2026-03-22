@@ -77,7 +77,7 @@ export default function ProjectsPage() {
         onSave={handleProjectSave}
       />
       <div className="flex min-h-0 flex-1 overflow-hidden bg-black">
-        <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-black">
           <Link
             href="/projects"
             className="absolute right-4 top-4 z-10 flex size-10 items-center justify-center rounded-xl transition-colors hover:bg-white/[0.06] sm:right-6 sm:top-5"
@@ -93,7 +93,7 @@ export default function ProjectsPage() {
             onNewProject={() => openNewProjectModal(null)}
             onTemplateWorkflow={(wf) => openNewProjectModal(wf)}
           />
-          <main className="flowy-chat-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-width:thin]">
+          <main className="flowy-chat-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto bg-black [scrollbar-width:thin]">
             <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center px-8 py-[15dvh] sm:px-10">
               <div className="flex w-full flex-1 flex-col items-center justify-center">
                 <StitchProjectsHero
