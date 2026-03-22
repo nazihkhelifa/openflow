@@ -3235,14 +3235,15 @@ export function FlowyAgentPanel({
       {/* Custom instructions modal */}
       {isSettingsOpen && (
         <div
-          className="fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center"
+          className="fixed inset-0 z-[9999] overflow-y-auto overflow-x-hidden bg-black/50"
           onMouseDown={() => setIsSettingsOpen(false)}
         >
-          <div
-            className="bg-neutral-900 border border-white/10 rounded-2xl shadow-xl w-[560px] max-w-[92vw]"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between gap-3">
+          <div className="flex min-h-full justify-center px-4 py-10 sm:px-6 sm:py-12">
+            <div
+              className="flex max-h-[min(92vh,880px)] w-[560px] max-w-[92vw] flex-col overflow-hidden rounded-2xl border border-white/10 bg-neutral-900 shadow-xl"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
               <div className="flex flex-col">
                 <h4 className="text-sm font-medium text-neutral-100">Custom instructions</h4>
                 <p className="text-xs text-neutral-400">
@@ -3258,14 +3259,14 @@ export function FlowyAgentPanel({
                 <Minus className="w-5 h-5 rotate-45" />
               </button>
             </div>
-            <div className="p-4">
+            <div className="flowy-chat-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overflow-x-hidden px-4 py-4 [scrollbar-width:thin]">
               <textarea
                 value={customInstructions}
                 onChange={(e) => setCustomInstructions(e.target.value)}
                 placeholder="Example: Prefer concise answers first; only edit canvas when I explicitly ask."
-                className="w-full min-h-[140px] bg-neutral-900/40 border border-neutral-700 rounded-xl px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-blue-500 resize-y"
+                className="min-h-[120px] max-h-[min(36vh,260px)] w-full resize-y rounded-xl border border-neutral-700 bg-neutral-900/40 px-3 py-2 text-sm text-neutral-200 placeholder-neutral-500 focus:border-blue-500 focus:outline-none"
               />
-              <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                 <div className="text-xs font-medium text-neutral-200">Agent execution policy</div>
                 <div className="mt-2 grid grid-cols-1 gap-2 text-[11px] text-neutral-300">
                   <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-2 py-1.5">
@@ -3288,7 +3289,7 @@ export function FlowyAgentPanel({
                   </label>
                 </div>
               </div>
-              <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div>
                     <div className="text-xs font-medium text-neutral-200">Project agent memory</div>
@@ -3368,23 +3369,24 @@ export function FlowyAgentPanel({
                   </pre>
                 </details>
               </div>
-              <div className="mt-3 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setCustomInstructions("")}
-                  className="px-3 py-2 text-xs text-neutral-300 hover:text-neutral-100 transition-colors rounded-lg border border-neutral-600 bg-neutral-800/30"
-                >
-                  Clear
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsSettingsOpen(false)}
-                  className="px-3 py-2 text-xs text-white hover:bg-blue-500 transition-colors rounded-lg bg-blue-600"
-                >
-                  Save
-                </button>
-              </div>
             </div>
+            <div className="flex shrink-0 items-center justify-between gap-2 border-t border-white/10 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setCustomInstructions("")}
+                className="rounded-lg border border-neutral-600 bg-neutral-800/30 px-3 py-2 text-xs text-neutral-300 transition-colors hover:text-neutral-100"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+                className="rounded-lg bg-blue-600 px-3 py-2 text-xs text-white transition-colors hover:bg-blue-500"
+              >
+                Save
+              </button>
+            </div>
+          </div>
           </div>
         </div>
       )}
