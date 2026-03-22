@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useMemo, type RefObject } from "react";
-import { AtSign, Loader2, Paperclip } from "lucide-react";
+import { AtSign, Loader2, Paperclip, X } from "lucide-react";
 import {
   FLOWY_PLANNER_LLM_OPTIONS,
   flowyPlannerLlmOptionId,
@@ -33,6 +33,10 @@ export type FlowyCanvasChatComposerProps = {
   isExecutingStep: boolean;
   isRunning: boolean;
   chatInputPlaceholder: string;
+  /** Thread selected in history rail — next composer send will fork and merge this thread’s capped history into the planner payload. */
+  continuationTitle?: string | null;
+  continuationPreview?: string | null;
+  onClearContinuation?: () => void;
   contextNodeChips: FlowyContextNodeChip[];
   onRemoveMentionedNode: (nodeId: string) => void;
   imageAttachments: FlowyChatImageAttachment[];
@@ -55,6 +59,9 @@ export function FlowyCanvasChatComposer({
   isExecutingStep,
   isRunning,
   chatInputPlaceholder,
+  continuationTitle,
+  continuationPreview,
+  onClearContinuation,
   contextNodeChips,
   onRemoveMentionedNode,
   imageAttachments,
@@ -86,6 +93,40 @@ export function FlowyCanvasChatComposer({
             <div className="-mt-1 flex items-center gap-2 px-1 text-[11px] text-neutral-400">
               <Loader2 className="size-3.5 animate-spin" aria-hidden />
               <span>Flowy is thinking...</span>
+            </div>
+          )}
+          {(continuationTitle || continuationPreview) && (
+            <div
+              className="-mt-1 rounded-xl border border-emerald-400/25 bg-emerald-500/[0.08] px-2 py-1.5"
+              role="status"
+              aria-live="polite"
+            >
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-emerald-200/80">
+                    Context for next send
+                  </p>
+                  {continuationTitle ? (
+                    <p className="truncate text-[12px] font-medium text-neutral-100">{continuationTitle}</p>
+                  ) : null}
+                  {continuationPreview ? (
+                    <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-neutral-400">
+                      {continuationPreview}
+                    </p>
+                  ) : null}
+                </div>
+                {onClearContinuation ? (
+                  <button
+                    type="button"
+                    onClick={onClearContinuation}
+                    className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-white/10 text-neutral-400 transition-colors hover:bg-white/10 hover:text-neutral-100"
+                    aria-label="Clear attached thread context"
+                    title="Clear"
+                  >
+                    <X className="size-3.5" strokeWidth={2} aria-hidden />
+                  </button>
+                ) : null}
+              </div>
             </div>
           )}
           {contextNodeChips.length > 0 && (
@@ -294,7 +335,10 @@ export function FlowyCanvasChatComposer({
       </form>
       <p className="mt-1.5 text-center text-[10px] leading-snug text-neutral-600">
         <span className="text-neutral-500">Flowy is experimental.</span>{" "}
-        <span className="text-neutral-600">Chat = advice · Assist = build + approve run</span>
+        <span className="text-neutral-600">
+          Chat = advice · Assist = build + approve run · Pick a thread in the panel to attach its history to your next
+          message
+        </span>
       </p>
     </div>
   );

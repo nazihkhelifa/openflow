@@ -1801,7 +1801,7 @@ export function WorkflowCanvas() {
           onClick={() => setIsChatOpen(true)}
           title="Flowy agent"
           aria-label="Open Flowy agent"
-          className="fixed bottom-4 right-5 z-[60] inline-flex items-center justify-center h-11 w-11 rounded-full backdrop-blur-[16px] bg-background-transparent-black-default border border-neutral-700 hover:bg-neutral-800 transition-colors"
+          className="fixed top-4 right-5 z-[60] inline-flex items-center justify-center h-11 w-11 rounded-full backdrop-blur-[16px] bg-background-transparent-black-default border border-neutral-700 hover:bg-neutral-800 transition-colors"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

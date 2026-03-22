@@ -17,7 +17,6 @@ import { useReactFlow } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import {
   Check,
-  ChevronDown,
   ChevronRight,
   Circle,
   Copy,
@@ -30,7 +29,7 @@ import {
   SquarePlus,
 } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
-import { capFlowyChatHistory } from "@/lib/flowy/capFlowyChatHistory";
+import { capFlowyChatHistory, type FlowyChatHistoryTurn } from "@/lib/flowy/capFlowyChatHistory";
 import {
   createEmptyFlowySession,
   loadCanvasStateMemory,
@@ -635,6 +634,14 @@ export function FlowyAgentPanel({
   const [activeSessionId, setActiveSessionId] = useState<string>(() => seed.id);
   const activeSessionIdRef = useRef(activeSessionId);
   activeSessionIdRef.current = activeSessionId;
+  /** Thread chosen in the bottom history rail: next composer send forks a new session and passes this thread's messages into the planner (capped). */
+  const [continuationSourceSessionId, setContinuationSourceSessionId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!continuationSourceSessionId) return;
+    if (!sessions.some((s) => s.id === continuationSourceSessionId)) {
+      setContinuationSourceSessionId(null);
+    }
+  }, [continuationSourceSessionId, sessions]);
 
   const updateSessionMessages = useCallback((sessionId: string, updater: (prev: ChatMsg[]) => ChatMsg[]) => {
     setSessions((prev) =>
@@ -669,9 +676,6 @@ export function FlowyAgentPanel({
 
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [customInstructions, setCustomInstructions] = useState<string>(() => loadCustomInstructions());
-  const [historyMenuOpen, setHistoryMenuOpen] = useState(false);
-  const historyButtonRef = useRef<HTMLButtonElement>(null);
-  const historyMenuRef = useRef<HTMLDivElement>(null);
   const [storageReady, setStorageReady] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState("");
@@ -798,24 +802,6 @@ export function FlowyAgentPanel({
   useEffect(() => {
     saveFlowyPlannerLlm(plannerLlm);
   }, [plannerLlm]);
-
-  useEffect(() => {
-    if (!historyMenuOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      const t = e.target as Node;
-      if (historyButtonRef.current?.contains(t) || historyMenuRef.current?.contains(t)) return;
-      setHistoryMenuOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setHistoryMenuOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [historyMenuOpen]);
 
   const stateForRequest = useMemo(() => {
     // Ensure we always send a consistent shape.
@@ -960,18 +946,59 @@ export function FlowyAgentPanel({
   );
 
   const requestPlan = useCallback(
-    async (message: string, opts?: { suppressUserEcho?: boolean; stageIndex?: number; decompositionStages?: DecompositionStage[]; runQualityCheck?: boolean }) => {
+    async (
+      message: string,
+      opts?: {
+        suppressUserEcho?: boolean;
+        stageIndex?: number;
+        decompositionStages?: DecompositionStage[];
+        runQualityCheck?: boolean;
+        /** When true (composer only): may fork a new session so each send is a new “couple”; optional prior-thread context. */
+        forkNewThread?: boolean;
+        contextSessionId?: string | null;
+      }
+    ) => {
       const trimmed = message.trim();
       if (!trimmed || isPlanning) return;
 
-      const sessionId = activeSessionIdRef.current;
+      let inheritedTurns: FlowyChatHistoryTurn[] = [];
+      let sessionId = activeSessionIdRef.current;
       const agentModeAtStart = flowyAgentModeRef.current;
 
+      if (opts?.forkNewThread) {
+        const ctxId = opts.contextSessionId ?? null;
+        const current = sessionsRef.current.find((s) => s.id === activeSessionIdRef.current);
+        const hasMessages = (current?.messages?.length ?? 0) > 0;
+        let mustFork = false;
+
+        if (ctxId) {
+          mustFork = true;
+          const src = sessionsRef.current.find((x) => x.id === ctxId);
+          inheritedTurns = capFlowyChatHistory(
+            (src?.messages ?? []).map((m) => ({ role: m.role, text: m.text }))
+          );
+        } else if (hasMessages) {
+          mustFork = true;
+        }
+
+        if (mustFork) {
+          const newSess = createSession();
+          const nextSessions = [newSess, ...sessionsRef.current];
+          sessionsRef.current = nextSessions;
+          setSessions(nextSessions);
+          setActiveSessionId(newSess.id);
+          activeSessionIdRef.current = newSess.id;
+          sessionId = newSess.id;
+        }
+
+        setContinuationSourceSessionId(null);
+      }
 
       const priorMessages = sessionsRef.current.find((s) => s.id === sessionId)?.messages ?? [];
-      const chatHistoryPayload = capFlowyChatHistory(
-        priorMessages.map((m) => ({ role: m.role, text: m.text }))
-      );
+      const chatHistoryPayload = capFlowyChatHistory([
+        ...inheritedTurns,
+        ...priorMessages.map((m) => ({ role: m.role, text: m.text })),
+      ]);
 
       setErrorMessage(null);
       setIsPlanning(true);
@@ -1383,6 +1410,7 @@ export function FlowyAgentPanel({
     [
       cancelFlowyNodeRun,
       contextNodeIds,
+      createSession,
       customInstructions,
       imageAttachments,
       isPlanning,
@@ -1395,6 +1423,7 @@ export function FlowyAgentPanel({
       updateSessionMessages,
       canvasStateMemory,
       enforceCanvasControl,
+      setContinuationSourceSessionId,
     ]
   );
 
@@ -1419,10 +1448,11 @@ export function FlowyAgentPanel({
       }
       return next;
     });
+    const contextSessionId = continuationSourceSessionId;
     setInput("");
-    await requestPlan(trimmed);
+    await requestPlan(trimmed, { forkNewThread: true, contextSessionId });
     setImageAttachments([]);
-  }, [input, requestPlan]);
+  }, [continuationSourceSessionId, input, requestPlan]);
 
   const handleSuggestNextStep = useCallback(() => {
     void requestPlan(
@@ -1904,6 +1934,25 @@ export function FlowyAgentPanel({
     [sortedSessions, activeSessionId]
   );
 
+  const continuationComposerHint = useMemo(() => {
+    if (!continuationSourceSessionId) return null;
+    const s = sessions.find((x) => x.id === continuationSourceSessionId);
+    if (!s) return null;
+    const tail = s.messages.slice(-4);
+    const preview =
+      tail.length > 0
+        ? tail
+            .map((m) => {
+              const role = m.role === "user" ? "You" : "Flowy";
+              const t = m.text.replace(/\s+/g, " ").trim().slice(0, 100);
+              return `${role}: ${t}${m.text.length > 100 ? "…" : ""}`;
+            })
+            .join(" · ")
+            .slice(0, 280)
+        : "(empty thread)";
+    return { title: s.title, preview };
+  }, [continuationSourceSessionId, sessions]);
+
   const switchToSession = useCallback(
     (id: string) => {
       stopAutoRun();
@@ -1914,16 +1963,15 @@ export function FlowyAgentPanel({
       setPendingExecuteNodeIds(null);
       resetExecution();
       setErrorMessage(null);
-      setHistoryMenuOpen(false);
     },
     [resetExecution, resetPendingUiCommands, stopAutoRun]
   );
 
   const handleNewChat = useCallback(() => {
+    setContinuationSourceSessionId(null);
     const next = createSession();
     setSessions((prev) => [next, ...prev]);
     setActiveSessionId(next.id);
-    setHistoryMenuOpen(false);
     setInput("");
     setPendingOperations(null);
     resetPendingUiCommands();
@@ -1964,6 +2012,7 @@ export function FlowyAgentPanel({
       setPendingExecuteNodeIds(null);
       resetExecution();
       setErrorMessage(null);
+      setContinuationSourceSessionId((prev) => (prev === sessionId ? null : prev));
       setSessions((prev) => {
         const remaining = prev.filter((s) => s.id !== sessionId);
         if (remaining.length === 0) {
@@ -2086,6 +2135,13 @@ export function FlowyAgentPanel({
               isExecutingStep={isExecutingStep}
               isRunning={isRunning}
               chatInputPlaceholder={chatInputPlaceholder}
+              continuationTitle={continuationComposerHint?.title ?? null}
+              continuationPreview={continuationComposerHint?.preview ?? null}
+              onClearContinuation={
+                continuationSourceSessionId
+                  ? () => setContinuationSourceSessionId(null)
+                  : undefined
+              }
               contextNodeChips={contextNodeChips}
               onRemoveMentionedNode={(id) =>
                 setMentionedNodeIds((prev) => prev.filter((x) => x !== id))
@@ -2107,84 +2163,23 @@ export function FlowyAgentPanel({
         : null}
       {isOpen ? (
     <div
+      className="pointer-events-none fixed top-[4.5rem] right-4 z-40 flex h-[calc(100vh-5.5rem)] max-h-[calc(100vh-5.5rem)] w-[min(480px,calc(100vw-2rem))] flex-col gap-3"
+    >
+    <div
       role="dialog"
       aria-modal="true"
       aria-label="Flowy AI chat"
       data-testid="flowy-sidebar"
-      className="fixed z-40 flex flex-col overflow-hidden transition-all duration-200 bottom-16 right-4 h-[min(576px,calc(100vh-136px))] max-h-[min(576px,calc(100vh-136px))] w-[480px] rounded-[24px] border border-white/[0.11] bg-[rgb(25,25,25)]/90 shadow-[0_8px_10px_-6px_rgba(0,0,0,0.1),0_20px_25px_-5px_rgba(0,0,0,0.1)] backdrop-blur-[12px]"
+      className="pointer-events-auto flex min-h-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-white/[0.11] bg-[rgb(25,25,25)]/90 shadow-[0_8px_10px_-6px_rgba(0,0,0,0.1),0_20px_25px_-5px_rgba(0,0,0,0.1)] backdrop-blur-[12px] transition-all duration-200"
     >
-      <div className="relative z-10 flex w-full shrink-0 items-center justify-between p-2 border-b border-white/10">
-        <div className="group relative z-[100] flex min-w-0 items-center gap-1">
-          <button
-            ref={historyButtonRef}
-            type="button"
-            aria-label="Chat history"
-            aria-haspopup="listbox"
-            aria-expanded={historyMenuOpen}
-            onClick={() => setHistoryMenuOpen((o) => !o)}
-            className="flex h-8 max-w-[200px] items-center justify-center gap-1.5 overflow-hidden rounded-xl px-2 text-sm leading-none tracking-tight text-neutral-200 transition-colors hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25"
-          >
-            <span className="max-w-[160px] truncate whitespace-nowrap">
-              {activeSession?.title ?? "New Chat"}
-            </span>
-            <ChevronDown
-              className={`size-3.5 shrink-0 text-neutral-400 transition-transform duration-200 ${
-                historyMenuOpen ? "rotate-180" : ""
-              }`}
-              aria-hidden
-            />
-          </button>
-          {historyMenuOpen && (
-            <div
-              ref={historyMenuRef}
-              role="listbox"
-              aria-label="Previous chats"
-              className="absolute left-0 top-[calc(100%+6px)] z-[120] w-[min(100vw-2rem,280px)] overflow-hidden rounded-xl border border-white/10 bg-neutral-900/95 py-1 shadow-xl backdrop-blur-xl"
-            >
-              {sortedSessions.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-neutral-500">No chats yet</div>
-              ) : (
-                sortedSessions.map((s) => (
-                  <div
-                    key={s.id}
-                    role="option"
-                    aria-selected={s.id === activeSessionId}
-                    className={`flex w-full items-center gap-2 px-2 py-1 text-sm ${
-                      s.id === activeSessionId ? "bg-white/10 text-white" : "text-neutral-300 hover:bg-white/10"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => switchToSession(s.id)}
-                      className="min-w-0 flex-1 truncate rounded px-1 py-1 text-left hover:text-white"
-                    >
-                      {s.title}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleRenameSession(s.id)}
-                      className="rounded px-1.5 py-0.5 text-[10px] text-neutral-400 hover:bg-white/10 hover:text-neutral-200"
-                      title="Rename chat"
-                      aria-label={`Rename ${s.title}`}
-                    >
-                      Rename
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteSession(s.id)}
-                      className="rounded px-1.5 py-0.5 text-[10px] text-rose-300/70 hover:bg-rose-500/20 hover:text-rose-200"
-                      title="Delete chat"
-                      aria-label={`Delete ${s.title}`}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
+      <div className="relative z-10 flex w-full shrink-0 items-center justify-between gap-2 border-b border-white/10 p-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2 px-1">
+          <div className="h-1 w-4 shrink-0 rounded-full bg-white/25" aria-hidden />
+          <h2 className="min-w-0 truncate text-sm font-medium leading-tight tracking-tight text-neutral-100">
+            {activeSession?.title ?? "New Chat"}
+          </h2>
         </div>
-        <div className="flex items-center justify-center" role="toolbar" aria-label="Sidebar controls">
+        <div className="flex shrink-0 items-center justify-center" role="toolbar" aria-label="Sidebar controls">
           <button
             type="button"
             aria-label="Custom prompt instructions"
@@ -2247,6 +2242,11 @@ export function FlowyAgentPanel({
                 <p className="text-xs mt-2">Example: “Add three nanoBanana nodes from this image, then I’ll pick one.”</p>
               </>
             )}
+            <p className="mx-auto mt-4 max-w-[20rem] text-[11px] leading-snug text-neutral-600">
+              Pick a thread below to review it; your <span className="text-neutral-500">next send</span> starts a{" "}
+              <span className="text-neutral-500">new</span> thread and passes that thread&apos;s history to Flowy (see
+              the note above the input). Or use <span className="text-neutral-500">New chat</span> for a blank draft.
+            </p>
           </div>
         )}
 
@@ -2634,6 +2634,102 @@ export function FlowyAgentPanel({
             · Controls: next stage, prev stage, goto stage 2, show stages, run now, stop, clear plan
           </span>
         </div>
+      </div>
+    </div>
+
+      <div
+        role="region"
+        aria-label="Chat history"
+        data-testid="flowy-chat-history-rail"
+        className="pointer-events-auto flex w-full shrink-0 flex-col overflow-hidden rounded-[20px] border border-white/12 bg-[rgb(22,22,22)]/95 shadow-[0_8px_24px_-10px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+      >
+        <div className="flex justify-center border-b border-white/[0.06] py-2" aria-hidden>
+          <div className="h-0.5 w-7 rounded-full bg-white/20" />
+        </div>
+        <ul className="flowy-chat-scrollbar max-h-[min(200px,30vh)] overflow-y-auto px-1.5 py-2">
+          {sortedSessions.length === 0 ? (
+            <li className="px-2 py-4 text-center text-xs leading-relaxed text-neutral-500">
+              No threads yet — tap New chat or send a message to start a conversation.
+            </li>
+          ) : (
+            sortedSessions.map((s) => {
+              const isActive = s.id === activeSessionId;
+              const isContinuationSource = continuationSourceSessionId === s.id;
+              return (
+                <li key={s.id} className="group mb-0.5 last:mb-0">
+                  <div
+                    className={`flex items-center gap-0.5 rounded-xl px-1 py-1 ${
+                      isActive ? "bg-white/[0.12]" : "hover:bg-white/[0.06]"
+                    } ${isContinuationSource ? "ring-1 ring-inset ring-emerald-400/40" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (continuationSourceSessionId === s.id) {
+                          setContinuationSourceSessionId(null);
+                        } else {
+                          setContinuationSourceSessionId(s.id);
+                          switchToSession(s.id);
+                        }
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-white/25"
+                      aria-current={isActive ? "true" : undefined}
+                      aria-pressed={isContinuationSource}
+                      title={
+                        isContinuationSource
+                          ? "Click again to stop attaching this thread’s history to your next message"
+                          : "Select thread — its history will attach to your next composer send"
+                      }
+                    >
+                      <Check
+                        className={`size-3.5 shrink-0 ${
+                          isContinuationSource
+                            ? "text-emerald-300"
+                            : isActive
+                              ? "text-emerald-400/90"
+                              : "text-neutral-600"
+                        }`}
+                        strokeWidth={2.5}
+                        aria-hidden
+                      />
+                      <span
+                        className={`min-w-0 flex-1 truncate ${isActive ? "font-medium text-neutral-100" : "text-neutral-400"}`}
+                      >
+                        {s.title}
+                      </span>
+                    </button>
+                    <div className="flex shrink-0 gap-0.5 pr-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRenameSession(s.id);
+                        }}
+                        className="rounded-md px-1 py-1 text-[10px] font-medium text-neutral-500 hover:bg-white/10 hover:text-neutral-200"
+                        title="Rename thread"
+                        aria-label={`Rename ${s.title}`}
+                      >
+                        Ren
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteSession(s.id);
+                        }}
+                        className="rounded-md px-1 py-1 text-[10px] font-medium text-rose-400/80 hover:bg-rose-500/15 hover:text-rose-200"
+                        title="Delete thread"
+                        aria-label={`Delete ${s.title}`}
+                      >
+                        Del
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })
+          )}
+        </ul>
       </div>
     </div>
       ) : null}
