@@ -215,130 +215,129 @@ export function ProjectsStitchListPanel({
     activeTab === "mine" ? "Search projects" : "Search templates";
 
   return (
-    <aside className="hidden min-h-0 w-[288px] shrink-0 flex-col gap-3 p-3 md:flex">
-      <div className="hide-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto rounded-2xl border border-secondary bg-surface-container p-3 backdrop-blur-glass md:pb-4">
-        <div className="flex min-h-0 flex-1 flex-col gap-1">
-          <div
-            role="radiogroup"
-            className="relative mb-2 flex gap-1 rounded-[32px] bg-surface-container p-0.5 backdrop-blur-[40px]"
-          >
-            {tabButton("mine", "My projects", LayoutGrid)}
-            {tabButton("templates", "Templates", LayoutTemplate)}
-          </div>
+    <aside className="hidden min-h-0 w-[288px] shrink-0 flex-col gap-3 px-3 pt-[15dvh] pb-[15dvh] md:flex">
+      <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-secondary bg-surface-container p-3 backdrop-blur-glass md:pb-4">
+        <div
+          role="radiogroup"
+          className="relative mb-2 shrink-0 flex gap-1 rounded-[32px] bg-surface-container p-0.5 backdrop-blur-[40px]"
+        >
+          {tabButton("mine", "My projects", LayoutGrid)}
+          {tabButton("templates", "Templates", LayoutTemplate)}
+        </div>
 
-          <div className="sticky top-0 z-10">
-            <div className="flex items-center rounded-full bg-state-enabled p-2.5 backdrop-blur-md transition-colors duration-200 focus-within:bg-state-active">
-              <span className="pl-1 pr-2 text-stitch-muted">
-                <Search className="size-4 shrink-0" aria-hidden />
-              </span>
-              <input
-                type="text"
-                value={searchValue}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder={searchPlaceholder}
-                className="w-full bg-transparent text-sm text-stitch-fg outline-none selection:bg-neutral-600/70"
-              />
-            </div>
-            <div className="h-3" />
+        <div className="shrink-0">
+          <div className="flex items-center rounded-full bg-state-enabled p-2.5 backdrop-blur-md transition-colors duration-200 focus-within:bg-state-active">
+            <span className="pl-1 pr-2 text-stitch-muted">
+              <Search className="size-4 shrink-0" aria-hidden />
+            </span>
+            <input
+              type="text"
+              value={searchValue}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="w-full bg-transparent text-sm text-stitch-fg outline-none selection:bg-neutral-600/70"
+            />
           </div>
+          <div className="h-3" />
+        </div>
 
-          {activeTab === "mine" && (
-            <>
-              <div className="bg-transparent py-4 text-sm font-medium text-stitch-muted md:py-2">
-                Recent
-              </div>
-              {loading ? (
-                <div className="space-y-2">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="h-14 animate-pulse rounded-lg bg-state-enabled" />
-                  ))}
+        <div className="flowy-chat-scrollbar min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
+          <div className="flex flex-col gap-1 pb-1">
+            {activeTab === "mine" && (
+              <>
+                <div className="bg-transparent py-4 text-sm font-medium text-stitch-muted md:py-2">
+                  Recent
                 </div>
-              ) : filteredProjects.length === 0 ? (
-                <p className="px-2 text-sm text-stitch-muted">No projects yet.</p>
-              ) : (
-                <ul className="m-0 list-none p-0">
-                  {filteredProjects.map((p) => {
-                    const thumb =
-                      "source" in p && p.source === "file"
-                        ? (p.thumbnail ?? "/thumbnail.jpeg")
-                        : (p as LocalProject).image ?? "/thumbnail.jpeg";
-                    const href = `/projects/${encodeURIComponent(p.id)}`;
-                    const designVar = designRgbFromId(p.id);
-                    return (
-                      <li key={p.id} className="list-none">
-                        <Link
-                          href={href}
-                          className={listItemClass}
-                        >
-                          <div>
-                            <div
-                              className="group relative flex justify-center rounded-lg bg-design opacity-100 shadow-md"
-                              style={
-                                {
-                                  "--backgroundColor-design": designVar,
-                                } as CSSProperties
-                              }
-                            >
-                              <img
-                                src={thumb}
-                                alt=""
-                                className="size-10 min-w-10 flex justify-center overflow-hidden rounded-md bg-center bg-cover bg-no-repeat object-cover object-top"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex min-w-0 flex-1 flex-col justify-center">
-                            <p className="line-clamp-2 font-semibold text-stitch-fg">
-                              {p.name || "Untitled"}
-                            </p>
-                            <div className="line-clamp-1 flex items-center justify-between text-xs text-stitch-muted">
-                              <div className="flex items-center gap-1 text-[10px] text-inherit">
-                                <Calendar className="size-3 shrink-0" aria-hidden />
-                                <span>{formatListDate(p.updatedAt)}</span>
+                {loading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div key={i} className="h-14 animate-pulse rounded-lg bg-state-enabled" />
+                    ))}
+                  </div>
+                ) : filteredProjects.length === 0 ? (
+                  <p className="px-2 text-sm text-stitch-muted">No projects yet.</p>
+                ) : (
+                  <ul className="m-0 list-none p-0">
+                    {filteredProjects.map((p) => {
+                      const thumb =
+                        "source" in p && p.source === "file"
+                          ? (p.thumbnail ?? "/thumbnail.jpeg")
+                          : (p as LocalProject).image ?? "/thumbnail.jpeg";
+                      const href = `/projects/${encodeURIComponent(p.id)}`;
+                      const designVar = designRgbFromId(p.id);
+                      return (
+                        <li key={p.id} className="list-none">
+                          <Link href={href} className={listItemClass}>
+                            <div>
+                              <div
+                                className="group relative flex justify-center rounded-lg bg-design opacity-100 shadow-md"
+                                style={
+                                  {
+                                    "--backgroundColor-design": designVar,
+                                  } as CSSProperties
+                                }
+                              >
+                                <img
+                                  src={thumb}
+                                  alt=""
+                                  className="size-10 min-w-10 flex justify-center overflow-hidden rounded-md bg-center bg-cover bg-no-repeat object-cover object-top"
+                                />
                               </div>
                             </div>
-                          </div>
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </>
-          )}
+                            <div className="flex min-w-0 flex-1 flex-col justify-center">
+                              <p className="line-clamp-2 font-semibold text-stitch-fg">
+                                {p.name || "Untitled"}
+                              </p>
+                              <div className="line-clamp-1 flex items-center justify-between text-xs text-stitch-muted">
+                                <div className="flex items-center gap-1 text-[10px] text-inherit">
+                                  <Calendar className="size-3 shrink-0" aria-hidden />
+                                  <span>{formatListDate(p.updatedAt)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </>
+            )}
 
-          {activeTab === "templates" && (
-            <>
-              <div className="bg-transparent py-4 text-sm font-medium text-stitch-muted md:py-2">
-                Examples
-              </div>
-              <ul className="list-none p-0 m-0">
-                {filteredPresets.map((preset) => (
-                  <li key={preset.id} className="list-none">
-                    <button
-                      type="button"
-                      disabled={templateLoadingId !== null}
-                      onClick={() => void runTemplate(preset.id)}
-                      className={`${listItemClass} w-full text-left disabled:opacity-50`}
-                    >
-                      <SidebarTemplateThumb presetId={preset.id} />
-                      <div className="flex min-w-0 flex-1 flex-col justify-center">
-                        <p className="line-clamp-2 font-semibold text-stitch-fg">{preset.name}</p>
-                        <div className="line-clamp-1 flex items-center justify-between text-xs text-stitch-muted">
-                          <div className="flex items-center gap-1 text-[10px] text-inherit">
-                            <Calendar className="size-3 shrink-0" aria-hidden />
-                            <span>{preset.category}</span>
+            {activeTab === "templates" && (
+              <>
+                <div className="bg-transparent py-4 text-sm font-medium text-stitch-muted md:py-2">
+                  Examples
+                </div>
+                <ul className="m-0 list-none p-0">
+                  {filteredPresets.map((preset) => (
+                    <li key={preset.id} className="list-none">
+                      <button
+                        type="button"
+                        disabled={templateLoadingId !== null}
+                        onClick={() => void runTemplate(preset.id)}
+                        className={`${listItemClass} w-full text-left disabled:opacity-50`}
+                      >
+                        <SidebarTemplateThumb presetId={preset.id} />
+                        <div className="flex min-w-0 flex-1 flex-col justify-center">
+                          <p className="line-clamp-2 font-semibold text-stitch-fg">{preset.name}</p>
+                          <div className="line-clamp-1 flex items-center justify-between text-xs text-stitch-muted">
+                            <div className="flex items-center gap-1 text-[10px] text-inherit">
+                              <Calendar className="size-3 shrink-0" aria-hidden />
+                              <span>{preset.category}</span>
+                            </div>
                           </div>
+                          {templateLoadingId === preset.id ? (
+                            <p className="mt-1 text-[10px] text-stitch-muted">Loading…</p>
+                          ) : null}
                         </div>
-                        {templateLoadingId === preset.id ? (
-                          <p className="mt-1 text-[10px] text-stitch-muted">Loading…</p>
-                        ) : null}
-                      </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

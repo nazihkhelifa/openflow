@@ -96,9 +96,9 @@ export default function ProjectsPage() {
             onNewProject={() => openNewProjectModal(null)}
             onTemplateWorkflow={(wf) => openNewProjectModal(wf)}
           />
-          <main className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
-            <div className="mx-auto w-full max-w-3xl px-8 pb-12 pt-14 sm:px-10 sm:pt-20">
-              <div className="mx-auto flex max-w-3xl flex-col items-center">
+          <main className="flowy-chat-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-width:thin]">
+            <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center px-8 py-[15dvh] sm:px-10">
+              <div className="flex w-full flex-1 flex-col items-center justify-center">
                 <StitchProjectsHero
                   onWorkflowGenerated={(wf) => openNewProjectModal(wf)}
                 />
