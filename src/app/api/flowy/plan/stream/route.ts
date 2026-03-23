@@ -87,22 +87,34 @@ export async function POST(request: Request) {
       let stdout = "";
       let stderr = "";
       let closed = false;
+      const sendEvent = (event: string, payload: unknown) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(sseEvent(event, payload)));
+        } catch {
+          closed = true;
+        }
+      };
+      const closeStream = () => {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
+      };
 
       const timeout = setTimeout(() => {
         if (closed) return;
         try {
           child.kill();
         } catch {}
-        controller.enqueue(
-          encoder.encode(
-            sseEvent("error", {
-              ok: false,
-              error: `Flowy planner timed out after ${Math.round(FLOWY_PLANNER_TIMEOUT_MS / 1000)}s.`,
-            })
-          )
-        );
-        controller.close();
-        closed = true;
+        sendEvent("error", {
+          ok: false,
+          error: `Flowy planner timed out after ${Math.round(FLOWY_PLANNER_TIMEOUT_MS / 1000)}s.`,
+        });
+        closeStream();
       }, FLOWY_PLANNER_TIMEOUT_MS);
 
       child.stdout.on("data", (chunk) => {
@@ -116,7 +128,7 @@ export async function POST(request: Request) {
           if (!line.startsWith("FLOWY_PROGRESS:")) continue;
           try {
             const event = JSON.parse(line.slice("FLOWY_PROGRESS:".length));
-            controller.enqueue(encoder.encode(sseEvent("progress", event)));
+            sendEvent("progress", event);
           } catch {}
         }
       });
@@ -128,16 +140,11 @@ export async function POST(request: Request) {
           command === "uv"
             ? ` ${FLOWY_VENV_HINT} If uv is not installed, install it or use FLOWY_PYTHON.`
             : ` ${FLOWY_VENV_HINT}`;
-        controller.enqueue(
-          encoder.encode(
-            sseEvent("error", {
-              ok: false,
-              error: err instanceof Error ? `${err.message}${extra}` : "Planner spawn failed",
-            })
-          )
-        );
-        controller.close();
-        closed = true;
+        sendEvent("error", {
+          ok: false,
+          error: err instanceof Error ? `${err.message}${extra}` : "Planner spawn failed",
+        });
+        closeStream();
       });
 
       child.on("close", (code) => {
@@ -146,23 +153,18 @@ export async function POST(request: Request) {
         try {
           const parsed = JSON.parse(stdout);
           if (code !== 0) {
-            controller.enqueue(encoder.encode(sseEvent("error", parsed)));
+            sendEvent("error", parsed);
           } else {
-            controller.enqueue(encoder.encode(sseEvent("result", parsed)));
-            controller.enqueue(encoder.encode(sseEvent("done", { ok: true })));
+            sendEvent("result", parsed);
+            sendEvent("done", { ok: true });
           }
         } catch {
-          controller.enqueue(
-            encoder.encode(
-              sseEvent("error", {
-                ok: false,
-                error: code !== 0 ? `Planner exited with code ${code}: ${stderr || stdout}` : "Planner returned non-JSON output",
-              })
-            )
-          );
+          sendEvent("error", {
+            ok: false,
+            error: code !== 0 ? `Planner exited with code ${code}: ${stderr || stdout}` : "Planner returned non-JSON output",
+          });
         }
-        controller.close();
-        closed = true;
+        closeStream();
       });
 
       child.stdin.write(JSON.stringify(payload));
