@@ -30,7 +30,7 @@ export function NewProjectModal({ isOpen, onClose, onSave }: NewProjectModalProp
 
   useEffect(() => {
     if (!isOpen) return;
-    setName("");
+    setName("untitled");
     setDirectoryPath(getDefaultProjectDirectory() || "");
     setLocalThumbnail(null);
     setWorkflowThumbnail(null);

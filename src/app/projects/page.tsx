@@ -52,11 +52,70 @@ export default function ProjectsPage() {
   const setUseExternalImageStorage = useWorkflowStore(
     (state) => state.setUseExternalImageStorage
   );
+  const UNTITLED_NAME = "untitled";
 
   const openNewProjectModal = (workflow: WorkflowFile | null) => {
     setPendingTemplateWorkflow(workflow);
     setShowNewProjectModal(true);
   };
+
+  const createInDefaultDirectory = useCallback(
+    async (workflow: WorkflowFile | null, name = UNTITLED_NAME): Promise<boolean> => {
+      const defaultDir = getDefaultProjectDirectory().trim();
+      if (!defaultDir) return false;
+      try {
+        setUseExternalImageStorage(true);
+        const fullProjectPath = ensureProjectSubfolderPath(defaultDir, name);
+        const validateRes = await fetch(
+          `/api/workflow?path=${encodeURIComponent(fullProjectPath)}`
+        );
+        const validateJson = (await validateRes.json()) as {
+          exists?: boolean;
+          isDirectory?: boolean;
+        };
+        if (validateJson.exists && !validateJson.isDirectory) {
+          show("Project path is not a directory", "error");
+          return true;
+        }
+
+        const workflowToSave = workflow ?? {
+          version: 1 as const,
+          id: fullProjectPath,
+          name,
+          nodes: [],
+          edges: [],
+          edgeStyle: "angular" as const,
+          groups: {},
+        };
+        const payloadWorkflow = {
+          ...workflowToSave,
+          id: fullProjectPath,
+          name,
+        };
+        const postRes = await fetch("/api/workflow", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directoryPath: fullProjectPath,
+            filename: name.replace(/[^a-zA-Z0-9-_]/g, "_"),
+            workflow: payloadWorkflow,
+          }),
+        });
+        const postData = (await postRes.json()) as { success?: boolean; error?: string };
+        if (!postData.success) throw new Error(postData.error || "Failed to create project");
+
+        setWorkflowMetadata(fullProjectPath, name, fullProjectPath);
+        await loadWorkflow(payloadWorkflow, fullProjectPath);
+        router.push(`/projects/${encodeURIComponent(fullProjectPath)}`);
+        show("Project created", "success");
+        return true;
+      } catch (err) {
+        show(err instanceof Error ? err.message : "Failed to create project", "error");
+        return true;
+      }
+    },
+    [loadWorkflow, router, setUseExternalImageStorage, setWorkflowMetadata, show]
+  );
 
   const handleProjectSave = async (
     _id: string,
@@ -220,7 +279,12 @@ export default function ProjectsPage() {
           </nav>
           <button
             type="button"
-            onClick={() => openNewProjectModal(null)}
+            onClick={() => {
+              void (async () => {
+                const created = await createInDefaultDirectory(null, UNTITLED_NAME);
+                if (!created) openNewProjectModal(null);
+              })();
+            }}
             className="fixed bottom-6 left-1/2 z-10 h-10 w-[min(264px,calc(100vw-2rem))] -translate-x-1/2 rounded-full bg-stitch-fg text-sm font-semibold text-neutral-950 transition-colors hover:bg-[#e8eaed] md:hidden"
           >
             New project
@@ -229,7 +293,10 @@ export default function ProjectsPage() {
             <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center px-8 py-[15dvh] sm:px-10">
               <div className="flex w-full flex-1 flex-col items-center justify-center">
                 <StitchProjectsHero
-                  onWorkflowGenerated={(wf) => openNewProjectModal(wf)}
+                  onWorkflowGenerated={async (wf) => {
+                    const created = await createInDefaultDirectory(wf, UNTITLED_NAME);
+                    if (!created) openNewProjectModal(wf);
+                  }}
                 />
               </div>
             </div>
@@ -239,7 +306,10 @@ export default function ProjectsPage() {
             onTabChange={setActiveTab}
             searchValue={searchQuery}
             onSearchChange={setSearchQuery}
-            onNewProject={() => openNewProjectModal(null)}
+            onNewProject={async () => {
+              const created = await createInDefaultDirectory(null, UNTITLED_NAME);
+              if (!created) openNewProjectModal(null);
+            }}
             onInstantiateTemplate={instantiateTemplateFromSidebar}
           />
         </div>

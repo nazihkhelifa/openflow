@@ -32,6 +32,22 @@ export function StitchProjectsHero({ onWorkflowGenerated }: StitchProjectsHeroPr
   const model: LLMModelType = quickstartDefaults?.model ?? defaultModels[provider];
   const systemInstructionExtra = getQuickstartSystemInstructionExtra();
 
+  const resolveBackendPlannerConfig = useCallback((): { provider: "google" | "openai"; model: string } => {
+    if (provider === "openai") {
+      return { provider: "openai", model: model === "gpt-4.1-nano" ? "gpt-4.1-nano" : "gpt-4.1-mini" };
+    }
+    return {
+      provider: "google",
+      model:
+        model === "gemini-2.5-flash" ||
+        model === "gemini-3-flash-preview" ||
+        model === "gemini-3-pro-preview" ||
+        model === "gemini-3.1-pro-preview"
+          ? model
+          : "gemini-3-flash-preview",
+    };
+  }, [model, provider]);
+
   const submit = useCallback(async () => {
     const text = prompt.trim();
     if (text.length < 3) {
@@ -41,27 +57,44 @@ export function StitchProjectsHero({ onWorkflowGenerated }: StitchProjectsHeroPr
     setError(null);
     setIsGenerating(true);
     try {
-      const response = await fetch("/api/quickstart", {
+      const planner = resolveBackendPlannerConfig();
+      const userMessage = systemInstructionExtra?.trim()
+        ? `${text}\n\nAdditional instructions:\n${systemInstructionExtra.trim()}`
+        : text;
+      const response = await fetch("/api/flowy/orchestrate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          description: text,
-          contentLevel: "full",
-          provider,
-          model,
-          systemInstructionExtra,
+          message: userMessage,
+          workflowState: { nodes: [], edges: [], groups: {} },
+          selectedNodeIds: [],
+          provider: planner.provider,
+          model: planner.model,
+          autoApply: true,
+          maxIterations: 3,
         }),
       });
       const result = await response.json();
-      if (!result.success) throw new Error(result.error || "Failed to generate workflow");
-      if (result.workflow) onWorkflowGenerated(result.workflow as WorkflowFile);
+      if (!result.ok) throw new Error(result.error || "Failed to generate workflow");
+      const state = result.finalWorkflowState as { nodes?: unknown[]; edges?: unknown[]; groups?: Record<string, unknown> } | undefined;
+      if (!state) throw new Error("No workflow state returned");
+      const generatedWorkflow: WorkflowFile = {
+        version: 1,
+        id: `wf_${Date.now()}_flowy`,
+        name: "untitled",
+        nodes: Array.isArray(state.nodes) ? (state.nodes as WorkflowFile["nodes"]) : [],
+        edges: Array.isArray(state.edges) ? (state.edges as WorkflowFile["edges"]) : [],
+        groups: (state.groups ?? {}) as WorkflowFile["groups"],
+        edgeStyle: "angular",
+      };
+      onWorkflowGenerated(generatedWorkflow);
       setPrompt("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, provider, model, systemInstructionExtra, onWorkflowGenerated]);
+  }, [prompt, systemInstructionExtra, onWorkflowGenerated, resolveBackendPlannerConfig]);
 
   return (
     <div className="flex w-full max-w-2xl flex-col gap-8">
