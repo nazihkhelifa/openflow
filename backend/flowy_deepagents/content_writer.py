@@ -23,6 +23,35 @@ from connection_validation import handle_id_allowed, validate_planned_edge
 FLOWY_DEEPAGENTS_DIR = os.path.join(os.path.dirname(__file__), "")
 
 
+def _sanitize_text(value: str) -> str:
+    """Replace invalid Unicode surrogates so UTF-8 writes never crash."""
+    try:
+        return value.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+    except Exception:
+        return value
+
+
+def _sanitize_json_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return _sanitize_text(value)
+    if isinstance(value, list):
+        return [_sanitize_json_value(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _sanitize_json_value(v) for k, v in value.items()}
+    return value
+
+
+def _safe_json_dumps(value: Any, ensure_ascii: bool = False, indent: Optional[int] = None) -> str:
+    return json.dumps(_sanitize_json_value(value), ensure_ascii=ensure_ascii, indent=indent)
+
+
+def _safe_stream_write(stream: Any, text: str) -> None:
+    try:
+        stream.write(text)
+    except UnicodeEncodeError:
+        stream.write(_sanitize_text(text))
+
+
 _STAGE_META: Dict[str, Dict[str, str]] = {
     "init": {"stageId": "analyze_request", "stageTitle": "Analyze request", "source": "planner"},
     "advisor": {"stageId": "build_plan", "stageTitle": "Plan advisor", "source": "planner"},
@@ -52,8 +81,8 @@ def _emit_progress(stage: str, detail: str = "") -> None:
         "status": "running",
         "source": meta.get("source", "planner"),
     }
-    event_json = json.dumps(event, ensure_ascii=False)
-    sys.stderr.write(f"FLOWY_PROGRESS:{event_json}\n")
+    event_json = _safe_json_dumps(event, ensure_ascii=False)
+    _safe_stream_write(sys.stderr, f"FLOWY_PROGRESS:{event_json}\n")
     sys.stderr.flush()
 
 
@@ -363,7 +392,7 @@ def _read_stdin_json() -> Dict[str, Any]:
     raw = sys.stdin.read()
     if not raw.strip():
         return {}
-    return json.loads(raw)
+    return cast(Dict[str, Any], _sanitize_json_value(json.loads(raw)))
 
 
 def _coerce_image_attachments(raw_attachments: Any) -> List[Dict[str, str]]:
@@ -1943,8 +1972,9 @@ def main() -> None:
             llm_provider, llm_model_id = _resolve_planner_provider_model(payload)
             model, router_model = _build_planner_chat_models(llm_provider, llm_model_id)
         except ValueError as e:
-            sys.stdout.write(
-                json.dumps(
+            _safe_stream_write(
+                sys.stdout,
+                _safe_json_dumps(
                     {
                         "ok": False,
                         "error": str(e),
@@ -1984,8 +2014,9 @@ def main() -> None:
                 "run_now": "Running pending execution now.",
                 "dismiss_changes": "Dismissing pending canvas changes.",
             }.get(control_intent.intent, "Applying control command.")
-            sys.stdout.write(
-                json.dumps(
+            _safe_stream_write(
+                sys.stdout,
+                _safe_json_dumps(
                     {
                         "ok": True,
                         "mode": "control",
@@ -2011,8 +2042,9 @@ def main() -> None:
             text = _run_plan_advisor_only(
                 model, message, workflow_state, selected_node_ids, attachments, model_catalog=model_catalog, canvas_state_memory=canvas_state_memory, chat_history=chat_history
             )
-            sys.stdout.write(
-                json.dumps(
+            _safe_stream_write(
+                sys.stdout,
+                _safe_json_dumps(
                     {
                         "ok": True,
                         "mode": "chat",
@@ -2049,8 +2081,9 @@ def main() -> None:
                         text = _run_plan_advisor_only(
                             model, message, workflow_state, selected_node_ids, attachments, model_catalog=model_catalog, canvas_state_memory=canvas_state_memory, chat_history=chat_history
                         )
-                        sys.stdout.write(
-                            json.dumps(
+                        _safe_stream_write(
+                            sys.stdout,
+                            _safe_json_dumps(
                                 {
                                     "ok": True,
                                     "mode": "chat",
@@ -2069,8 +2102,9 @@ def main() -> None:
                             "Here’s a quick answer. If you want me to change the canvas, say what to add, "
                             "connect, or run."
                         )
-                    sys.stdout.write(
-                        json.dumps(
+                    _safe_stream_write(
+                        sys.stdout,
+                        _safe_json_dumps(
                             {
                                 "ok": True,
                                 "mode": "chat",
@@ -2192,10 +2226,11 @@ def main() -> None:
                 "isLastStage": stage_index >= len(decomposition.stages) - 1,
             }
 
-        sys.stdout.write(json.dumps(out))
+        _safe_stream_write(sys.stdout, _safe_json_dumps(out))
     except Exception as e:
-        sys.stdout.write(
-            json.dumps(
+        _safe_stream_write(
+            sys.stdout,
+            _safe_json_dumps(
                 {
                     "ok": False,
                     "error": f"Deep planner crashed: {e}",

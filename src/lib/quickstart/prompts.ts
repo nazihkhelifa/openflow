@@ -17,8 +17,6 @@ CRITICAL:
 
 Node capabilities (high-level):
 - mediaInput: provides media output (image/audio/video/3d depending on mode); can accept "reference" in image mode.
-- imageInput: outputs "image".
-- audioInput: outputs "audio".
 - prompt: outputs "text".
 - annotation: image-editing step; image → image.
 - generateImage: image + text → image.
