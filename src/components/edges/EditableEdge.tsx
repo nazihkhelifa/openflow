@@ -117,8 +117,16 @@ export function EditableEdge({
 
     const handles: { x: number; y: number; direction: "horizontal" | "vertical" }[] = [];
 
-    const midX = (sourceX + targetX) / 2 + offsetX;
-    const midY = (sourceY + targetY) / 2 + offsetY;
+    // Defensive: ReactFlow sometimes provides transient NaN coordinates during edge/node edits.
+    // Never render SVG attributes with NaN (React will warn).
+    const sx = Number(sourceX);
+    const sy = Number(sourceY);
+    const tx = Number(targetX);
+    const ty = Number(targetY);
+    if (![sx, sy, tx, ty].every(Number.isFinite)) return [];
+
+    const midX = (sx + tx) / 2 + offsetX;
+    const midY = (sy + ty) / 2 + offsetY;
 
     // Middle segment handle
     if (Math.abs(targetX - sourceX) > 50) {
@@ -267,8 +275,8 @@ export function EditableEdge({
         handlePositions.map((handle, index) => (
           <g key={index}>
             <circle
-              cx={handle.x}
-              cy={handle.y}
+              cx={Number.isFinite(handle.x) ? handle.x : 0}
+              cy={Number.isFinite(handle.y) ? handle.y : 0}
               r={6}
               fill="white"
               stroke="#3b82f6"

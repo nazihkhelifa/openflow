@@ -125,6 +125,28 @@ describe("EditableEdge", () => {
     });
   });
 
+  describe("NaN safety", () => {
+    it("should not render draggable handle circles when coordinates are NaN", () => {
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      render(
+        <TestWrapper>
+          <EditableEdge
+            {...createDefaultProps({
+              sourceX: Number.NaN,
+              sourceY: 50,
+              targetX: 300,
+              targetY: 50,
+            })}
+          />
+        </TestWrapper>
+      );
+
+      // If handlePositions are skipped, React should not warn about SVG NaN attributes.
+      expect(consoleErrorSpy).not.toHaveBeenCalled();
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
   describe("Edge Colors", () => {
     it("should use green color for image handle type", () => {
       const { container } = render(

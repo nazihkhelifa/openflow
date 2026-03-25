@@ -1,0 +1,18 @@
+Next Steps Log
+
+Last updated: 2026-03-25
+
+Completed Recently
+- Added backend agent reference in mylogs.
+- Added truncation-aware retry handling for planner JSON validation failures.
+- Extended Cursor rule to keep this next-steps file updated.
+
+Immediate Next Actions
+[ ] Reproduce the previous `validation_failed` case with the same user request.
+[ ] Confirm retries now surface `truncated_json_output` when JSON is cut.
+[ ] Verify planner succeeds with compact retry output.
+[ ] If still failing, add server-side prompt text size clamp for node payloads.
+
+Blockers / Assumptions
+- Assumes model/API output limits can truncate long JSON responses.
+- Assumes compact retries are acceptable for user-facing quality.

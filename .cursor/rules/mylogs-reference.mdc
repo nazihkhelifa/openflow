@@ -1,0 +1,19 @@
+---
+description: Use mylogs as source of website and backend-agent capabilities, and keep it updated after changes
+alwaysApply: true
+---
+
+# Mylogs Reference And Maintenance
+
+- Treat `mylogs/` as the primary local reference for:
+  - website functionalities/behaviors
+  - backend agent behavior and capabilities
+- Maintain a dedicated task handoff file at `mylogs/next-steps.txt`.
+- Before implementing or changing behavior, check relevant files in `mylogs/` for existing documented functionality.
+- After any code change that affects behavior, flows, features, endpoints, or agent logic, update the relevant file(s) in `mylogs/` in the same task.
+- After each substantive task, update `mylogs/next-steps.txt` with:
+  - what was just completed (1-3 concise bullets)
+  - the immediate next actions to do (ordered checklist)
+  - any blockers/assumptions if present
+- Keep `mylogs/` updates concise, factual, and aligned with the implemented code.
+- If no `mylogs/` file exists for a new feature, create one in `mylogs/` with a short capability summary and usage notes.

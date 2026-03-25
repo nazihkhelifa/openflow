@@ -4,6 +4,7 @@ from __future__ import annotations
 import functools
 import json
 import os
+import re
 import sys
 from collections import Counter
 from typing import Any, Dict, List, Literal, Optional, Set, Tuple, Union, cast
@@ -165,6 +166,13 @@ class UserIntentSignalsModel(BaseModel):
     asksExecuteNodes: bool = Field(
         default=False,
         description="True when the user primarily wants to run/generate/execute existing nodes (not rewire the graph).",
+    )
+    asksPromptExtractFromImageOnly: bool = Field(
+        default=False,
+        description=(
+            "True when the user asks to extract/generate prompt text from image(s) only, "
+            "without requesting media node insertion into the workflow."
+        ),
     )
     canvasOperationHints: List[CanvasOperationHint] = Field(
         default_factory=list,
@@ -432,6 +440,75 @@ def _build_human_message_with_attachments(
     for att in attachments[:6]:
         content.append({"type": "image_url", "image_url": {"url": att["dataUrl"]}})
     return HumanMessage(content=content)
+
+
+def _sanitize_openflow_ui_snapshot(raw_snapshot: Optional[str]) -> Optional[str]:
+    if not raw_snapshot or not str(raw_snapshot).strip():
+        return None
+    text = str(raw_snapshot).strip()
+    lines = text.splitlines()
+    keep: List[str] = []
+    blocked_markers = (
+        "validation_failed LLM output",
+        "DOM Path:",
+        "Position:",
+        "React Component:",
+        "HTML Element:",
+        "data-cursor-element-id=",
+    )
+    for ln in lines:
+        l = ln.strip()
+        if not l:
+            continue
+        if any(m.lower() in l.lower() for m in blocked_markers):
+            continue
+        keep.append(ln)
+    compact = "\n".join(keep).strip()
+    if not compact:
+        return None
+    max_chars = 5000
+    if len(compact) > max_chars:
+        compact = compact[:max_chars] + "\n...[snapshot trimmed]"
+    return compact
+
+
+def _sanitize_node_text_payloads(operations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Remove common UI-dump noise from node text/prompt payloads and cap length
+    to reduce truncation risk.
+    """
+    if not isinstance(operations, list):
+        return operations
+
+    def _clean_text(value: Any, max_len: int = 420) -> Any:
+        if not isinstance(value, str):
+            return value
+        txt = value
+        # Strip embedded UI dump sections that often recurse error content.
+        txt = re.sub(r"(?is)DOM Path:.*", "", txt)
+        txt = re.sub(r"(?is)HTML Element:.*", "", txt)
+        txt = re.sub(r"(?is)React Component:.*", "", txt)
+        txt = re.sub(r"(?is)Position:.*", "", txt)
+        txt = re.sub(r"(?is)validation_failed LLM output.*", "", txt)
+        txt = txt.replace("\uFFFD", "'").strip()
+        if len(txt) > max_len:
+            txt = txt[:max_len].rstrip() + " ..."
+        return txt
+
+    out: List[Dict[str, Any]] = []
+    for op in operations:
+        if not isinstance(op, dict):
+            out.append(op)
+            continue
+        if op.get("type") not in {"addNode", "updateNode"} or not isinstance(op.get("data"), dict):
+            out.append(op)
+            continue
+        data = dict(op.get("data") or {})
+        for key in ("prompt", "text", "customTitle", "title", "notes"):
+            if key in data:
+                data[key] = _clean_text(data.get(key))
+        out.append({**op, "data": data})
+    return out
 
 
 def _materialize_attachment_operations(
@@ -832,6 +909,16 @@ def _safe_extract_first_json_object(text: str) -> Dict[str, Any]:
         return {}
 
 
+def _looks_like_truncated_json_output(text: str) -> bool:
+    s = (text or "").strip()
+    if not s:
+        return False
+    if not s.startswith("{") or s.endswith("}"):
+        return False
+    markers = ('"assistantText"', '"operations"', '"requiresApproval"', '"approvalReason"')
+    return any(m in s for m in markers)
+
+
 def _validate_edge_handles(
     source_handle: Optional[str],
     target_handle: Optional[str],
@@ -942,6 +1029,23 @@ def _validate_edit_operations(operations: List[Dict[str, Any]], workflow_state: 
             if handle_error:
                 errors.append(f"operations[{idx}] edge handle error: {handle_error}")
             else:
+                if str(th) == "reference":
+                    target_meta = sim_meta.get(str(target))
+                    source_meta = sim_meta.get(str(source))
+                    target_type = str((target_meta or {}).get("type") or "")
+                    source_type = str((source_meta or {}).get("type") or "")
+                    if target_type != "mediaInput":
+                        errors.append(
+                            f"operations[{idx}] reference edge target must be mediaInput; got '{target_type or 'unknown'}'."
+                        )
+                    if str(sh) not in {"image", "video"}:
+                        errors.append(
+                            f"operations[{idx}] reference edge sourceHandle must be image or video; got '{sh}'."
+                        )
+                    if source_type in {"prompt", "generateAudio"}:
+                        errors.append(
+                            f"operations[{idx}] reference edge source node type '{source_type}' is not valid."
+                        )
                 sem_err = validate_planned_edge(
                     str(source),
                     str(target),
@@ -1435,6 +1539,7 @@ def _parse_user_intent_signals(
         "- asksEaseCurveEdit: asks easing/bezier/output duration edits\n"
         "- asksSwitchRulesEdit: asks switch/conditional rule edits\n"
         "- asksExecuteNodes: run/generate/render/execute now (focus on firing nodes, not redrawing graph)\n"
+        "- asksPromptExtractFromImageOnly: user asks to extract/create prompt text from image only and does not ask to add image nodes to graph\n"
         "- canvasOperationHints: ordered list, each value one of:\n"
         "  addNode, removeNode, clearCanvas, updateNode, addEdge, removeEdge, moveNode, "
         "createGroup, deleteGroup, updateGroup, setNodeGroup\n"
@@ -1478,11 +1583,18 @@ def _format_canvas_operation_hints_block(intent_signals: Optional[UserIntentSign
             "Execution intent: the user wants to **run/generate** on the current graph — "
             "set `executeNodeIds` to the right targets when appropriate.\n"
         )
-    if not hints and not exec_line:
+    extract_prompt_only_line = ""
+    if intent_signals.asksPromptExtractFromImageOnly:
+        extract_prompt_only_line = (
+            "Prompt-extraction-only intent: avoid unnecessary mediaInput insertion; "
+            "prefer updating/adding prompt nodes that consume existing attached/connected images.\n"
+        )
+    if not hints and not exec_line and not extract_prompt_only_line:
         return ""
     lines = [
         "## Parsed canvas edit hints (from intent parser; follow unless impossible given workflow JSON)",
         exec_line,
+        extract_prompt_only_line,
     ]
     if hints:
         lines.append(
@@ -1500,6 +1612,70 @@ def _format_canvas_operation_hints_block(intent_signals: Optional[UserIntentSign
     if (intent_signals.rationale or "").strip():
         lines.append(f"- parser rationale: {intent_signals.rationale.strip()}")
     return "\n".join(line for line in lines if line) + "\n\n"
+
+
+def _normalize_operations_for_intent(
+    *,
+    operations: List[Dict[str, Any]],
+    parsed: Dict[str, Any],
+    message: str,
+    workflow_state: Dict[str, Any],
+    selected_node_ids: List[str],
+    intent_signals: Optional[UserIntentSignalsModel],
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    Post-builder normalization for cleaner, more deterministic plans.
+    - Prefer clearCanvas for full-reset intents.
+    - Auto-fill executeNodeIds when run intent is explicit and targets are obvious.
+    """
+    if not isinstance(operations, list):
+        return operations, parsed
+
+    normalized_ops = list(operations)
+    out = dict(parsed)
+    message_l = (message or "").lower()
+
+    clear_intent = any(k in message_l for k in ["clear", "reset", "wipe", "delete all", "remove all", "start over"])
+    hints = set((intent_signals.canvasOperationHints if intent_signals else []) or [])
+    if clear_intent or ("clearCanvas" in hints):
+        existing_ids = {
+            str(n.get("id"))
+            for n in (workflow_state.get("nodes") or [])
+            if isinstance(n, dict) and n.get("id")
+        }
+        remove_ids = {
+            str(op.get("nodeId"))
+            for op in normalized_ops
+            if isinstance(op, dict) and op.get("type") == "removeNode" and op.get("nodeId")
+        }
+        if existing_ids and remove_ids == existing_ids:
+            normalized_ops = [{"type": "clearCanvas"}]
+
+    execute_ids = out.get("executeNodeIds")
+    if bool(intent_signals and intent_signals.asksExecuteNodes) and not isinstance(execute_ids, list):
+        generation_types = {"generateImage", "generateVideo", "generate3d", "generateAudio"}
+        run_targets: List[str] = []
+        for op in normalized_ops:
+            if (
+                isinstance(op, dict)
+                and op.get("type") == "addNode"
+                and op.get("nodeType") in generation_types
+                and isinstance(op.get("nodeId"), str)
+            ):
+                run_targets.append(str(op.get("nodeId")))
+        if not run_targets:
+            selected_set = set(selected_node_ids or [])
+            for n in (workflow_state.get("nodes") or []):
+                if (
+                    isinstance(n, dict)
+                    and n.get("id") in selected_set
+                    and n.get("type") in generation_types
+                ):
+                    run_targets.append(str(n.get("id")))
+        if run_targets:
+            out["executeNodeIds"] = list(dict.fromkeys(run_targets))
+
+    return normalized_ops, out
 
 
 def _build_user_prompt(
@@ -1556,6 +1732,15 @@ def _build_user_prompt(
         if attachments
         else ""
     )
+    attachment_modes_block = ""
+    if attachments:
+        attachment_modes_block = (
+            "Attachment handling modes:\n"
+            "- If user asks to use images as workflow references, add/wire mediaInput nodes and reference/image edges.\n"
+            "- If user asks to only extract/create prompts from images, do NOT force mediaInput insertion; "
+            "prefer prompt-node updates/additions and keep operations minimal.\n"
+            "- Preserve clarity: do not mix extraction-only and full-reference rewiring unless explicitly requested.\n\n"
+        )
 
     snap_block = ""
     if openflow_ui_snapshot and str(openflow_ui_snapshot).strip():
@@ -1570,6 +1755,7 @@ def _build_user_prompt(
         + f"Message: {message}\n\n"
         + _format_canvas_operation_hints_block(intent_signals)
         + attachments_brief
+        + attachment_modes_block
         + (
             "Project model catalog (use exact modelId values from here when setting/changing models):\n"
             + json.dumps(model_catalog, ensure_ascii=False, indent=2)
@@ -1604,7 +1790,11 @@ CLOSE_CANVAS_PLAN = (
     "flowNode → \"nodeId\": string; handle → \"nodeId\": string and optional \"handleId\": string.\n"
     "fill/type need \"text\": string; wait needs \"ms\": number; waitFor optional \"timeoutMs\": number; press needs \"key\": string.\n"
     "Prefer **operations** for graph topology (nodes/edges/groups). Use **uiCommands** only when real menus/toolbars/clicks are required.\n"
-    "Keep uiCommands minimal; omit or use [] when not needed."
+    "Keep uiCommands minimal; omit or use [] when not needed.\n"
+    "Never copy raw DOM dumps, error banners, HTML snippets, or UI snapshot blocks into node data/prompt text.\n"
+    "Use concise node text fields. Hard limits: customTitle <= 80 chars; prompt/text <= 420 chars per node.\n"
+    "For multi-look workflows, encode variation mainly via multiple short prompt nodes and node settings; avoid long prose paragraphs.\n"
+    "Keep JSON compact to reduce truncation risk: keep assistantText concise and avoid oversized text blobs in node data."
 )
 
 CLOSE_PLAN_ADVISOR = (
@@ -1789,9 +1979,19 @@ def _run_builder_stage(
             closing_instruction=CLOSE_CANVAS_PLAN,
         )
         if attempt > 0 and last_errors:
+            compact_retry_hint = ""
+            if any("truncated_json_output" in err for err in last_errors):
+                compact_retry_hint = (
+                    "\n- Previous output appears truncated. Return a compact JSON response that still satisfies the request.\n"
+                    "- Keep assistantText under 160 chars.\n"
+                    "- Keep each prompt/text field under 320 chars.\n"
+                    "- Prefer updateNode + short data fields over large addNode payloads when possible.\n"
+                    "- Do not include explanatory prose inside node data."
+                )
             user_prompt += (
                 "\n\nYour previous operations were invalid:\n"
                 + "\n".join(f"- {e}" for e in last_errors)
+                + compact_retry_hint
                 + "\n\nReturn ONLY corrected JSON."
             )
         final_human = _build_human_message_with_attachments(user_prompt, attachments)
@@ -1827,6 +2027,8 @@ def _run_builder_stage(
         if not candidate:
             parsed = {}
             last_errors = ["LLM did not return valid JSON."]
+            if _looks_like_truncated_json_output(last_text):
+                last_errors.append("truncated_json_output")
             continue
 
         try:
@@ -1843,6 +2045,15 @@ def _run_builder_stage(
         operations = _optimize_operations_pre_validation(
             operations, workflow_state=workflow_state, selected_node_ids=selected_node_ids
         )
+        operations, candidate = _normalize_operations_for_intent(
+            operations=operations,
+            parsed=candidate,
+            message=message_for_toolbar_validation,
+            workflow_state=workflow_state,
+            selected_node_ids=selected_node_ids,
+            intent_signals=intent_signals,
+        )
+        operations = _sanitize_node_text_payloads(operations)
         candidate["operations"] = operations
         validation = _validate_edit_operations(operations, workflow_state)
         toolbar_validation = _validate_toolbar_intent_plan(
@@ -1940,8 +2151,8 @@ def main() -> None:
         model_catalog = _coerce_model_catalog(payload.get("modelCatalog"))
         canvas_state_memory = _coerce_canvas_state_memory(payload.get("canvasStateMemory"))
         openflow_ui_snapshot = payload.get("openflowUiSnapshot")
-        openflow_ui_snapshot_str = (
-            str(openflow_ui_snapshot).strip() if isinstance(openflow_ui_snapshot, str) and openflow_ui_snapshot.strip() else None
+        openflow_ui_snapshot_str = _sanitize_openflow_ui_snapshot(
+            str(openflow_ui_snapshot) if isinstance(openflow_ui_snapshot, str) else None
         )
         try:
             hist_max_turns = int(os.environ.get("FLOWY_CHAT_HISTORY_MAX_TURNS", "14"))
