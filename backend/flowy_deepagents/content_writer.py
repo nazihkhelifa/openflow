@@ -1978,6 +1978,42 @@ def _run_planner_stage(
     return decomposition, stage_index, current_stage_instruction, planner_message
 
 
+def _extract_canvas_plan_steps(workflow_state: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Scan canvas for agent-authored comment nodes that represent plan steps.
+
+    Returns a list of dicts ordered by node-id/position, each with:
+      nodeId, stepText, resolved, position_x
+    """
+    if not workflow_state:
+        return []
+    plan_steps: List[Dict[str, Any]] = []
+    for node in (workflow_state.get("nodes") or []):
+        if not isinstance(node, dict) or node.get("type") != "comment":
+            continue
+        data = node.get("data") or {}
+        content = data.get("content")
+        entries: List[Any] = content if isinstance(content, list) else ([content] if content else [])
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("authorType") != "agent" and entry.get("author") != "Flowy":
+                continue
+            text = (entry.get("text") or "").strip()
+            # Match "Step N:", "#N:", "N." or "N)" at start
+            if re.match(r'^(step\s*\d+|#\d+|\d+[\.\):])', text, re.IGNORECASE):
+                pos = node.get("position") or {}
+                plan_steps.append({
+                    "nodeId": str(node.get("id") or ""),
+                    "stepText": text,
+                    "resolved": bool(data.get("resolved")),
+                    "position_x": float(pos.get("x") or 0),
+                })
+                break  # one plan entry per comment node
+    # Sort by x position (left-to-right order) then nodeId
+    plan_steps.sort(key=lambda s: (s["position_x"], s["nodeId"]))
+    return plan_steps
+
+
 def _run_prompt_specialist_stage(
     planner_message: str,
     canvas_state_memory: Dict[str, Any],
@@ -1995,6 +2031,33 @@ def _run_prompt_specialist_stage(
     _emit_progress("subagent_prompt_specialist", "enriching planning context")
 
     hints: List[str] = []
+
+    # ── 0. Canvas plan-step detection (highest priority) ─────────────────────
+    plan_steps = _extract_canvas_plan_steps(workflow_state)
+    if plan_steps:
+        resolved_steps = [s for s in plan_steps if s["resolved"]]
+        pending_steps = [s for s in plan_steps if not s["resolved"]]
+
+        plan_block_parts: List[str] = ["CANVAS PLAN IN PROGRESS — follow this plan strictly:"]
+        if resolved_steps:
+            done_labels = "; ".join(f"[{s['nodeId']}] {s['stepText'][:70]}" for s in resolved_steps)
+            plan_block_parts.append(f"  Completed ({len(resolved_steps)}): {done_labels}")
+        if pending_steps:
+            next_step = pending_steps[0]
+            plan_block_parts.append(
+                f"  EXECUTE NOW → [{next_step['nodeId']}] {next_step['stepText']}"
+            )
+            plan_block_parts.append(
+                f"  After building this step: emit updateNode nodeId='{next_step['nodeId']}' "
+                f"data={{\"resolved\":true,\"resolvedAt\":\"<ISO timestamp>\"}} to mark it done."
+            )
+            if len(pending_steps) > 1:
+                remaining = "; ".join(s["stepText"][:50] for s in pending_steps[1:])
+                plan_block_parts.append(f"  Remaining steps (do NOT execute yet): {remaining}")
+        else:
+            plan_block_parts.append("  All steps resolved. Plan complete — no further execution needed unless user asks.")
+
+        hints.insert(0, "\n  ".join(plan_block_parts))
 
     # ── 1. Canvas state hints ─────────────────────────────────────────────────
     nodes = (workflow_state or {}).get("nodes") or []

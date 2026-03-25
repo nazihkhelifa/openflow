@@ -149,6 +149,17 @@ Master these patterns before inventing new topology.
 - Do NOT add `mediaInput` or any node.
 - Use when: user says "extract a prompt from this image", "write a prompt for", "give me a prompt" — intent is extraction/advisory only.
 
+### 23) Canvas-Native Planning (Visible Step-by-Step Build)
+- Use when: complex request (4+ nodes, multi-stage, or multi-modal).
+- Phase 1 — Plan: emit numbered comment nodes as a build plan, spread left-to-right at y=-140.
+  - `nodeId: "plan-step-N"`, `author: "Flowy"`, `authorType: "agent"`
+  - Text: `"Step N: <exact build instruction>"`
+  - Immediately execute Step 1 ops in the same response, then resolve plan-step-1.
+- Phase 2+ — Execute: each subsequent call executes only the next unresolved plan step + resolves it.
+- Layout: plan row at y=-140, actual workflow nodes at y=0+.
+- Max 6 steps. One step per response. Always resolve step before moving on.
+- The Planning Context block in your prompt tells you exactly which step is next.
+
 ### 22) Minimal Reset + Rebuild
 - First operation: `clearCanvas`
 - Then: build the simplest runnable workflow satisfying the request.
