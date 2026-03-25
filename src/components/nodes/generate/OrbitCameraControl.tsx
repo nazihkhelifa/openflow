@@ -287,11 +287,73 @@ export function OrbitCameraControl({
   onRotationChange,
   onTiltChange,
 }: OrbitCameraControlProps) {
+  const [viewMode, setViewMode] = useState<"perspective" | "face">("perspective");
+  const lastPerspectiveAnglesRef = useRef<{ rotation: number; tilt: number }>({
+    rotation,
+    tilt,
+  });
+
+  useEffect(() => {
+    if (viewMode === "perspective") {
+      lastPerspectiveAnglesRef.current = { rotation, tilt };
+    }
+  }, [rotation, tilt, viewMode]);
+
+  const handleFaceMode = useCallback(() => {
+    lastPerspectiveAnglesRef.current = { rotation, tilt };
+    setViewMode("face");
+    onRotationChange(0);
+    onTiltChange(0);
+  }, [rotation, tilt, onRotationChange, onTiltChange]);
+
+  const handlePerspectiveMode = useCallback(() => {
+    setViewMode("perspective");
+    const prev = lastPerspectiveAnglesRef.current;
+    onRotationChange(prev.rotation);
+    onTiltChange(prev.tilt);
+  }, [onRotationChange, onTiltChange]);
+
+  const handleReinitialize = useCallback(() => {
+    lastPerspectiveAnglesRef.current = { rotation: 0, tilt: 0 };
+    setViewMode("perspective");
+    onRotationChange(0);
+    onTiltChange(0);
+  }, [onRotationChange, onTiltChange]);
+
   return (
     <div className="w-full">
       <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#2B2B2B] p-2">
+        <div className="mb-2 flex items-center justify-center">
+          <div className="flex rounded-lg bg-white/5 p-0.5">
+            <button
+              type="button"
+              onClick={handlePerspectiveMode}
+              className={`px-3 py-1 text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors ${
+                viewMode === "perspective" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/60"
+              }`}
+            >
+              Perspective
+            </button>
+            <button
+              type="button"
+              onClick={handleFaceMode}
+              className={`px-3 py-1 text-[10px] font-semibold uppercase tracking-wider rounded-md transition-colors ${
+                viewMode === "face" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/60"
+              }`}
+            >
+              Face
+            </button>
+          </div>
+        </div>
         <div className="nodrag nopan mx-auto h-[256px] w-[256px] overflow-hidden rounded-xl border border-neutral-700/70 bg-[#2B2B2B]">
-          <Canvas camera={{ position: [3.5, 2.5, 4.5], fov: 55, near: 0.1, far: 100 }} gl={{ antialias: true }}>
+          <Canvas
+            camera={
+              viewMode === "face"
+                ? { position: [0, 0.65, 4.2], fov: 26, near: 0.1, far: 100 }
+                : { position: [3.5, 2.5, 4.5], fov: 55, near: 0.1, far: 100 }
+            }
+            gl={{ antialias: true }}
+          >
             <color attach="background" args={["#2B2B2B"]} />
             <Scene
               imageUrl={imageUrl}
@@ -302,6 +364,17 @@ export function OrbitCameraControl({
             />
           </Canvas>
         </div>
+        <button
+          type="button"
+          onClick={handleReinitialize}
+          className="mt-2 flex items-center gap-1 text-[11px] font-medium text-white/30 hover:text-white/60 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4" />
+            <path d="M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
+          </svg>
+          Reinitialize
+        </button>
       </div>
     </div>
   );
