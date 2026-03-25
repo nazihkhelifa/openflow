@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useEffect, Suspense } from "react";
+import { useCallback, useMemo, useRef, useState, useEffect, Suspense } from "react";
 import { Handle, Position, NodeProps, Node, NodeToolbar, useReactFlow } from "@xyflow/react";
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
@@ -21,6 +21,43 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 type MediaInputNodeType = Node<MediaInputNodeData, "mediaInput">;
+
+/** Accepts data URLs, http(s), blob — rejects bare filenames / junk the planner sometimes emits. */
+function coerceMediaInputImageUrl(raw: unknown): string | null {
+  if (raw == null) return null;
+  if (typeof raw === "object" && "url" in (raw as object)) {
+    const u = (raw as { url: unknown }).url;
+    if (typeof u === "string") return coerceMediaInputImageUrl(u);
+  }
+  if (typeof raw !== "string") return null;
+  const t = raw.trim();
+  if (!t) return null;
+  if (
+    t.startsWith("data:image/") ||
+    t.startsWith("http://") ||
+    t.startsWith("https://") ||
+    t.startsWith("blob:")
+  ) {
+    return t;
+  }
+  return null;
+}
+
+/** UI label: jacket-model.png.png -> jacket-model.png */
+function dedupeDisplayFilename(name: string | null | undefined): string | null {
+  if (name == null || typeof name !== "string") return null;
+  let n = name.trim();
+  if (!n) return null;
+  const lower = n.toLowerCase();
+  for (const ext of [".png", ".jpg", ".jpeg", ".webp", ".gif"] as const) {
+    const doubled = ext + ext;
+    if (lower.endsWith(doubled)) {
+      n = n.slice(0, -ext.length);
+      break;
+    }
+  }
+  return n;
+}
 
 // --- 3D Viewer helpers (from GLBViewerNode) ---
 function GLBModel({ url, onError }: { url: string; onError?: () => void }) {
@@ -135,6 +172,11 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
   const [isInteracting, setIsInteracting] = useState(false);
   const [cameraPanelOpen, setCameraPanelOpen] = useState(false);
   const [cameraPrompt, setCameraPrompt] = useState("");
+  const resolvedImageUrl = useMemo(
+    () => coerceMediaInputImageUrl(nodeData.image),
+    [nodeData.image]
+  );
+  const displayFilename = useMemo(() => dedupeDisplayFilename(nodeData.filename), [nodeData.filename]);
   const [cameraSettings, setCameraSettings] = useState({
     rotation: 0,
     tilt: 0,
@@ -248,7 +290,13 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
   }, [mode]);
 
   const aspectFitMedia =
-    mode === "image" ? nodeData.image : mode === "video" ? nodeData.videoFile : mode === "3d" ? nodeData.capturedImage : null;
+    mode === "image"
+      ? resolvedImageUrl
+      : mode === "video"
+        ? nodeData.videoFile
+        : mode === "3d"
+          ? nodeData.capturedImage
+          : null;
 
   const handleImageChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -438,12 +486,12 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
   }, [mode]);
 
   const handleFullscreen = useCallback(() => {
-    const url = mode === "image" ? nodeData.image : mode === "video" ? nodeData.videoFile : null;
+    const url = mode === "image" ? resolvedImageUrl : mode === "video" ? nodeData.videoFile : null;
     if (!url) return;
     const items = collectMediaItems(getNodes());
     const index = items.findIndex((item) => item.url === url && item.nodeId === id);
     openViewer(items, index >= 0 ? index : 0);
-  }, [getNodes, id, mode, nodeData.image, nodeData.videoFile, openViewer]);
+  }, [getNodes, id, mode, resolvedImageUrl, nodeData.videoFile, openViewer]);
 
   const hasContent = !!(nodeData.image || nodeData.audioFile || nodeData.videoFile || nodeData.glbUrl);
 
@@ -482,7 +530,7 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
   }, []);
 
   const handleGenerateCameraAngle = useCallback(async () => {
-    if (mode !== "image" || !nodeData.image || isGeneratingCameraAngle) return;
+    if (mode !== "image" || !resolvedImageUrl || isGeneratingCameraAngle) return;
     setIsGeneratingCameraAngle(true);
     try {
       const selectedModel = resolveCameraAngleModel();
@@ -490,7 +538,7 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          images: [nodeData.image],
+          images: [resolvedImageUrl],
           prompt: buildCameraAnglePrompt(),
           aspectRatio: "1:1",
           resolution: "2K",
@@ -521,7 +569,7 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
     } finally {
       setIsGeneratingCameraAngle(false);
     }
-  }, [mode, nodeData.image, isGeneratingCameraAngle, resolveCameraAngleModel, buildCameraAnglePrompt, updateNodeData, id]);
+  }, [mode, resolvedImageUrl, isGeneratingCameraAngle, resolveCameraAngleModel, buildCameraAnglePrompt, updateNodeData, id]);
   const getOutputHandle = () => {
     if (mode === "image") return { id: "image", type: "image" as const };
     if (mode === "audio") return { id: "audio", type: "audio" as const };
@@ -535,7 +583,7 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
       {hasContent && (mode === "image" || mode === "video") && (
         <UploadToolbar
           nodeId={id}
-          hasImage={mode === "image" ? !!nodeData.image : !!nodeData.videoFile}
+          hasImage={mode === "image" ? !!resolvedImageUrl : !!nodeData.videoFile}
           onReplaceClick={handleReplace}
           onCameraAngleClick={() => setCameraPanelOpen((v) => !v)}
           onDownloadClick={undefined}
@@ -622,11 +670,22 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
         <>
           {nodeData.image ? (
             <div className="relative group flex-1 min-h-0 min-w-0 overflow-hidden">
-              <img
-                src={nodeData.image}
-                alt={nodeData.filename || "Uploaded image"}
-                className="w-full h-full object-cover"
-              />
+              {resolvedImageUrl ? (
+                <img
+                  src={resolvedImageUrl}
+                  alt={displayFilename || "Uploaded image"}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="flex min-h-[120px] flex-1 flex-col items-center justify-center gap-2 bg-neutral-900/85 px-3 text-center">
+                  <span className="text-[11px] leading-snug text-amber-200/90">
+                    Image value is not a loadable URL (often a filename only). Replace the file or re-send the attachment from chat.
+                  </span>
+                  {displayFilename ? (
+                    <span className="max-w-full truncate font-mono text-[10px] text-neutral-500">{displayFilename}</span>
+                  ) : null}
+                </div>
+              )}
             </div>
           ) : null}
         </>

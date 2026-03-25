@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { openaiChatCompletionTokenParams } from "@/utils/openaiChatCompletionParams";
 import { GoogleGenAI } from "@google/genai";
 import { WorkflowFile } from "@/store/workflowStore";
 import type { LLMModelType, LLMProvider } from "@/types";
@@ -175,7 +176,7 @@ async function generateQuickstartText({
           { role: "user", content: prompt },
         ],
         temperature,
-        max_tokens: maxOutputTokens,
+        ...openaiChatCompletionTokenParams(modelId, maxOutputTokens),
       }),
     });
 

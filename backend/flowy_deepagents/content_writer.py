@@ -524,6 +524,30 @@ def _sanitize_node_text_payloads(operations: List[Dict[str, Any]]) -> List[Dict[
     return out
 
 
+def _is_usable_media_image_src(s: str) -> bool:
+    """True when `s` is a URL the browser <img> can load (data / http(s) / blob)."""
+    t = s.strip()
+    return bool(
+        t.startswith("data:image/")
+        or t.startswith("http://")
+        or t.startswith("https://")
+        or t.startswith("blob:")
+    )
+
+
+def _dedupe_image_filename(name: str) -> str:
+    """Fix doubled extensions like jacket-model.png.png from planner noise."""
+    n = name.strip()
+    if not n:
+        return n
+    lower = n.lower()
+    for ext in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+        doubled = ext + ext
+        if lower.endswith(doubled):
+            return n[: -len(ext)]
+    return n
+
+
 def _materialize_attachment_operations(
     operations: List[Dict[str, Any]], attachments: List[Dict[str, str]]
 ) -> List[Dict[str, Any]]:
@@ -534,6 +558,10 @@ def _materialize_attachment_operations(
       data.image = "data:image/..."
       data.mode = "image"
       data.filename = attachment name
+
+    Also replaces invalid `image` strings (e.g. filenames or placeholders) when
+    attachments can be resolved — LLMs often set image to the file name instead
+    of a data URL.
     """
     if not attachments:
         return operations
@@ -579,6 +607,37 @@ def _materialize_attachment_operations(
 
         return None
 
+    def _media_input_needs_attachment_materialize(data: Dict[str, Any]) -> bool:
+        """True when we should inject attachment dataUrl (missing or non-loadable image)."""
+        img = data.get("image")
+        if not isinstance(img, str) or not img.strip():
+            return True
+        return not _is_usable_media_image_src(img)
+
+    def _apply_attachment_to_media_data(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if not _media_input_needs_attachment_materialize(data):
+            return None
+        att = _resolve_attachment_for_media_input(data)
+        if not att:
+            return None
+        merged = dict(data)
+        merged["mode"] = "image"
+        merged["image"] = att["dataUrl"]
+        base_name = _dedupe_image_filename(str(att.get("name") or "image.png"))
+        fn = merged.get("filename")
+        if isinstance(fn, str) and fn.strip():
+            merged["filename"] = _dedupe_image_filename(fn.strip())
+        else:
+            merged["filename"] = base_name
+        for k in (
+            "imageFromAttachmentId",
+            "imageAttachmentId",
+            "imageAttachmentID",
+            "attachmentId",
+        ):
+            merged.pop(k, None)
+        return merged
+
     out: List[Dict[str, Any]] = []
     for op in operations:
         if (
@@ -588,30 +647,29 @@ def _materialize_attachment_operations(
             and isinstance(op.get("data"), dict)
         ):
             data = dict(op["data"])
-
-            # Only overwrite when we don't already have image payload.
-            if not isinstance(data.get("image"), str) or not data.get("image"):
-                att = _resolve_attachment_for_media_input(data)
-            else:
-                att = None
-
-            if att:
-                data["mode"] = "image"
-                data["image"] = att["dataUrl"]
-                if not data.get("filename"):
-                    data["filename"] = att["name"]
-
-                # Remove planner-only indirection fields.
-                for k in (
-                    "imageFromAttachmentId",
-                    "imageAttachmentId",
-                    "imageAttachmentID",
-                    "attachmentId",
-                ):
-                    if k in data:
-                        data.pop(k, None)
-                out.append({**op, "data": data})
+            new_data = _apply_attachment_to_media_data(data)
+            if new_data:
+                out.append({**op, "data": new_data})
                 continue
+        if (
+            isinstance(op, dict)
+            and op.get("type") == "updateNode"
+            and isinstance(op.get("data"), dict)
+        ):
+            data = dict(op["data"])
+            looks_like_media_input_patch = bool(
+                data.get("imageFromAttachmentId")
+                or data.get("imageAttachmentId")
+                or data.get("imageAttachmentID")
+                or data.get("attachmentId")
+                or ("image" in data)
+                or data.get("mode") == "image"
+            )
+            if looks_like_media_input_patch:
+                new_data = _apply_attachment_to_media_data(data)
+                if new_data:
+                    out.append({**op, "data": new_data})
+                    continue
         out.append(op)
     return out
 

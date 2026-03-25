@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { LLMGenerateRequest, LLMGenerateResponse, LLMModelType } from "@/types";
 import { logger } from "@/utils/logger";
+import { openaiChatCompletionTokenParams } from "@/utils/openaiChatCompletionParams";
 
 export const maxDuration = 60; // 1 minute timeout
 
@@ -167,7 +168,7 @@ async function generateWithOpenAI(
       model: modelId,
       messages: [{ role: "user", content }],
       temperature,
-      max_tokens: maxTokens,
+      ...openaiChatCompletionTokenParams(modelId, maxTokens),
     }),
   });
   const duration = Date.now() - startTime;
