@@ -802,7 +802,7 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
 
       {mode === "image" && !!nodeData.image && cameraPanelOpen && (
         <NodeToolbar nodeId={id} position={Position.Bottom} align="center" offset={10} className="nodrag nopan" style={{ pointerEvents: "auto" }}>
-          <div className="w-[360px] rounded-2xl border border-neutral-700/80 bg-neutral-900/95 p-2.5 shadow-2xl backdrop-blur-sm">
+          <div className="w-[520px] nodrag pointer-events-auto rounded-[24px] border border-white/10 bg-[#1f1f1f] p-2 shadow-[0_20px_50px_rgba(0,0,0,0.6)] backdrop-blur-sm">
             <div className="mb-2 flex items-center justify-between">
               <div className="text-sm font-medium text-neutral-100">3D Camera Control</div>
               <button
@@ -817,49 +817,53 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
               </button>
             </div>
 
-            <OrbitCameraControl
-              imageUrl={nodeData.image}
-              rotation={cameraSettings.rotation}
-              tilt={cameraSettings.tilt}
-              onRotationChange={(rotation) => setCameraSettings((prev) => ({ ...prev, rotation }))}
-              onTiltChange={(tilt) => setCameraSettings((prev) => ({ ...prev, tilt }))}
-            />
+            <div className="flex gap-3">
+              <div className="w-[276px] shrink-0">
+                <OrbitCameraControl
+                  imageUrl={nodeData.image}
+                  rotation={cameraSettings.rotation}
+                  tilt={cameraSettings.tilt}
+                  onRotationChange={(rotation) => setCameraSettings((prev) => ({ ...prev, rotation }))}
+                  onTiltChange={(tilt) => setCameraSettings((prev) => ({ ...prev, tilt }))}
+                />
+              </div>
 
-            <div className="mt-2 space-y-2">
-              <label className="block">
-                <div className="mb-1 text-[11px] text-neutral-400">Zoom ({cameraSettings.zoom}%)</div>
-                <input
-                  type="range"
-                  min={50}
-                  max={200}
-                  step={1}
-                  value={cameraSettings.zoom}
-                  onChange={(e) => setCameraSettings((prev) => ({ ...prev, zoom: Number(e.target.value) }))}
-                  className="w-full"
+              <div className="flex min-w-0 flex-1 flex-col gap-2 pt-1">
+                <label className="block">
+                  <div className="mb-1 text-[11px] text-neutral-400">Zoom ({cameraSettings.zoom}%)</div>
+                  <input
+                    type="range"
+                    min={50}
+                    max={200}
+                    step={1}
+                    value={cameraSettings.zoom}
+                    onChange={(e) => setCameraSettings((prev) => ({ ...prev, zoom: Number(e.target.value) }))}
+                    className="w-full"
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-[11px] text-neutral-300">
+                  <input
+                    type="checkbox"
+                    checked={cameraSettings.wideAngle}
+                    onChange={(e) => setCameraSettings((prev) => ({ ...prev, wideAngle: e.target.checked }))}
+                  />
+                  Wide-angle lens
+                </label>
+                <textarea
+                  value={cameraPrompt}
+                  onChange={(e) => setCameraPrompt(e.target.value)}
+                  placeholder="Optional camera instruction"
+                  className="nodrag nopan min-h-16 w-full resize-none rounded-lg border border-neutral-700 bg-neutral-800 p-2 text-[11px] text-white placeholder:text-neutral-500"
                 />
-              </label>
-              <label className="flex items-center gap-2 text-[11px] text-neutral-300">
-                <input
-                  type="checkbox"
-                  checked={cameraSettings.wideAngle}
-                  onChange={(e) => setCameraSettings((prev) => ({ ...prev, wideAngle: e.target.checked }))}
-                />
-                Wide-angle lens
-              </label>
-              <textarea
-                value={cameraPrompt}
-                onChange={(e) => setCameraPrompt(e.target.value)}
-                placeholder="Optional camera instruction"
-                className="nodrag nopan min-h-16 w-full resize-none rounded-lg border border-neutral-700 bg-neutral-800 p-2 text-[11px] text-white placeholder:text-neutral-500"
-              />
-              <button
-                type="button"
-                onClick={() => void handleGenerateCameraAngle()}
-                disabled={isGeneratingCameraAngle}
-                className="w-full rounded-xl bg-white py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {isGeneratingCameraAngle ? "Generating..." : "Generate New Angle"}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => void handleGenerateCameraAngle()}
+                  disabled={isGeneratingCameraAngle}
+                  className="mt-auto w-full rounded-xl bg-white py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isGeneratingCameraAngle ? "Generating..." : "Generate New Angle"}
+                </button>
+              </div>
             </div>
           </div>
         </NodeToolbar>

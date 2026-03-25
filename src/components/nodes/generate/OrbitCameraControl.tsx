@@ -323,21 +323,19 @@ export function OrbitCameraControl({
 }: OrbitCameraControlProps) {
   return (
     <div className="w-full">
-      <div className="mb-2 flex items-center gap-3 text-[10px] text-neutral-300">
-        <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Rotation</span>
-        <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-pink-400" /> Vertical Tilt</span>
-      </div>
-      <div className="nodrag nopan h-[170px] w-full overflow-hidden rounded-xl border border-neutral-700/70 bg-[#2B2B2B]">
-        <Canvas camera={{ position: [3.5, 2.5, 4.5], fov: 55, near: 0.1, far: 100 }} gl={{ antialias: true }}>
-          <color attach="background" args={["#2B2B2B"]} />
-          <Scene
-            imageUrl={imageUrl}
-            rotation={rotation}
-            tilt={tilt}
-            onRotationChange={onRotationChange}
-            onTiltChange={onTiltChange}
-          />
-        </Canvas>
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#2B2B2B] p-2">
+        <div className="nodrag nopan mx-auto h-[256px] w-[256px] overflow-hidden rounded-xl border border-neutral-700/70 bg-[#2B2B2B]">
+          <Canvas camera={{ position: [3.5, 2.5, 4.5], fov: 55, near: 0.1, far: 100 }} gl={{ antialias: true }}>
+            <color attach="background" args={["#2B2B2B"]} />
+            <Scene
+              imageUrl={imageUrl}
+              rotation={rotation}
+              tilt={tilt}
+              onRotationChange={onRotationChange}
+              onTiltChange={onTiltChange}
+            />
+          </Canvas>
+        </div>
       </div>
     </div>
   );
