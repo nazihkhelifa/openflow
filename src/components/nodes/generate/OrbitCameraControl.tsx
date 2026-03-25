@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Grid, Line, Sphere, Box } from "@react-three/drei";
+import { Sphere } from "@react-three/drei";
 import * as THREE from "three";
 
 interface OrbitCameraControlProps {
@@ -20,35 +20,30 @@ interface LiveAnglesRef {
   tilt: number;
 }
 
-const ORBIT_RADIUS = 2.5;
+function LightCone({ from, to }: { from: THREE.Vector3; to: THREE.Vector3 }) {
+  const dir = useMemo(() => to.clone().sub(from), [from, to]);
+  const length = dir.length();
+  const midpoint = useMemo(() => from.clone().add(to).multiplyScalar(0.5), [from, to]);
+  const quat = useMemo(() => {
+    const q = new THREE.Quaternion();
+    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+    return q;
+  }, [dir]);
+
+  return (
+    <mesh position={midpoint} quaternion={quat}>
+      <coneGeometry args={[0.26, Math.max(0.2, length), 24, 1, true]} />
+      <meshBasicMaterial color="#ffffff" transparent opacity={0.35} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+const ORBIT_RADIUS = 2.1;
 const SPHERE_SIZE = 0.18;
-
-const generateHorizontalArcPoints = (radius: number, segments = 64): THREE.Vector3[] => {
-  const points: THREE.Vector3[] = [];
-  for (let i = 0; i <= segments; i++) {
-    const theta = (i / segments) * Math.PI - Math.PI / 2;
-    points.push(new THREE.Vector3(radius * Math.sin(theta), 0, radius * Math.cos(theta)));
-  }
-  return points;
-};
-
-const generateVerticalArcPoints = (radius: number, segments = 32): THREE.Vector3[] => {
-  const points: THREE.Vector3[] = [];
-  for (let i = 0; i <= segments; i++) {
-    const phi = ((i / segments) * 135 - 45) * (Math.PI / 180);
-    points.push(new THREE.Vector3(0, radius * Math.sin(phi), radius * Math.cos(phi)));
-  }
-  return points;
-};
 
 const getHorizontalPosition = (theta: number, radius: number): THREE.Vector3 => {
   const rad = theta * (Math.PI / 180);
   return new THREE.Vector3(radius * Math.sin(rad), 0, radius * Math.cos(rad));
-};
-
-const getVerticalPosition = (phi: number, radius: number): THREE.Vector3 => {
-  const rad = phi * (Math.PI / 180);
-  return new THREE.Vector3(0, radius * Math.sin(rad), radius * Math.cos(rad));
 };
 
 function ImagePlane({ imageUrl }: { imageUrl: string | null }) {
@@ -110,6 +105,7 @@ function DraggableSphere({
   const meshRef = useRef<THREE.Mesh>(null);
   const { camera, gl, raycaster, pointer } = useThree();
   const planeRef = useRef(new THREE.Plane());
+  const dragSphere = useRef(new THREE.Sphere(new THREE.Vector3(0, 0, 0), ORBIT_RADIUS));
   const intersectPoint = useRef(new THREE.Vector3());
   const currentAngle = useRef<number>(0);
   const wasDragging = useRef<boolean>(false);
@@ -144,11 +140,22 @@ function DraggableSphere({
         let degrees = 0;
         let newPos = new THREE.Vector3();
         if (type === "rotation") {
-          const angle = Math.atan2(intersectPoint.current.x, intersectPoint.current.z);
-          degrees = Math.max(-90, Math.min(90, angle * (180 / Math.PI)));
-          const rad = degrees * (Math.PI / 180);
-          newPos = new THREE.Vector3(ORBIT_RADIUS * Math.sin(rad), 0, ORBIT_RADIUS * Math.cos(rad));
-          liveAngles.current.rotation = degrees;
+          const hit = raycaster.ray.intersectSphere(dragSphere.current, new THREE.Vector3()) ?? intersectPoint.current;
+          const rotationDeg = Math.atan2(hit.x, hit.z) * (180 / Math.PI);
+          const normalizedY = Math.max(-1, Math.min(1, hit.y / ORBIT_RADIUS));
+          const tiltDeg = Math.max(-85, Math.min(85, Math.asin(normalizedY) * (180 / Math.PI)));
+
+          const rotRad = rotationDeg * (Math.PI / 180);
+          const tiltRad = tiltDeg * (Math.PI / 180);
+          newPos = new THREE.Vector3(
+            ORBIT_RADIUS * Math.cos(tiltRad) * Math.sin(rotRad),
+            ORBIT_RADIUS * Math.sin(tiltRad),
+            ORBIT_RADIUS * Math.cos(tiltRad) * Math.cos(rotRad)
+          );
+
+          degrees = rotationDeg;
+          liveAngles.current.rotation = rotationDeg;
+          liveAngles.current.tilt = tiltDeg;
         } else {
           const angle = Math.atan2(intersectPoint.current.y, intersectPoint.current.z);
           degrees = Math.max(-45, Math.min(90, angle * (180 / Math.PI)));
@@ -166,15 +173,25 @@ function DraggableSphere({
     const currentRotation = liveAngles.current.rotation;
     const currentTilt = liveAngles.current.tilt;
     if (type === "rotation") {
-      const rad = currentRotation * (Math.PI / 180);
-      meshRef.current.position.set(ORBIT_RADIUS * Math.sin(rad), 0, ORBIT_RADIUS * Math.cos(rad));
+      const rotRad = currentRotation * (Math.PI / 180);
+      const tiltRad = currentTilt * (Math.PI / 180);
+      meshRef.current.position.set(
+        ORBIT_RADIUS * Math.cos(tiltRad) * Math.sin(rotRad),
+        ORBIT_RADIUS * Math.sin(tiltRad),
+        ORBIT_RADIUS * Math.cos(tiltRad) * Math.cos(rotRad)
+      );
     } else {
       const rad = currentTilt * (Math.PI / 180);
       meshRef.current.position.set(0, ORBIT_RADIUS * Math.sin(rad), ORBIT_RADIUS * Math.cos(rad));
     }
     if (wasDragging.current) {
       wasDragging.current = false;
-      onDragEnd(type, Math.round(currentAngle.current));
+      if (type === "rotation") {
+        onDragEnd("rotation", Math.round(liveAngles.current.rotation));
+        onDragEnd("tilt", Math.round(liveAngles.current.tilt));
+      } else {
+        onDragEnd(type, Math.round(currentAngle.current));
+      }
     }
   });
 
@@ -191,38 +208,6 @@ function DraggableSphere({
     >
       <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.35} />
     </Sphere>
-  );
-}
-
-function CameraIndicator({ liveAngles }: { liveAngles: React.MutableRefObject<LiveAnglesRef> }) {
-  const groupRef = useRef<THREE.Group>(null);
-  useFrame(() => {
-    if (!groupRef.current) return;
-    const rot = liveAngles.current.rotation * (Math.PI / 180);
-    const tilt = liveAngles.current.tilt * (Math.PI / 180);
-    const r = ORBIT_RADIUS * 0.7;
-    const pos = new THREE.Vector3(
-      r * Math.cos(tilt) * Math.sin(rot),
-      r * Math.sin(tilt) + 0.5,
-      r * Math.cos(tilt) * Math.cos(rot)
-    );
-    const matrix = new THREE.Matrix4().lookAt(pos, new THREE.Vector3(0, 0.8, 0), new THREE.Vector3(0, 1, 0));
-    const euler = new THREE.Euler().setFromRotationMatrix(matrix);
-    groupRef.current.position.copy(pos);
-    groupRef.current.rotation.copy(euler);
-  });
-  return (
-    <group ref={groupRef}>
-      <Box args={[0.35, 0.25, 0.2]}>
-        <meshStandardMaterial color="#3f4a5c" />
-      </Box>
-      <Box args={[0.1, 0.16, 0.1]} position={[0, 0, -0.14]}>
-        <meshStandardMaterial color="#202938" />
-      </Box>
-      <Sphere args={[0.11, 16, 16]} position={[0, 0, -0.22]}>
-        <meshStandardMaterial color="#fbbf24" emissive="#fbbf24" emissiveIntensity={0.55} />
-      </Sphere>
-    </group>
   );
 }
 
@@ -255,10 +240,7 @@ function Scene({ imageUrl, rotation, tilt, onRotationChange, onTiltChange }: Sce
     return () => window.removeEventListener("pointerup", onPointerUp);
   }, [dragging, gl]);
 
-  const horizontalArcPoints = useMemo(() => generateHorizontalArcPoints(ORBIT_RADIUS), []);
-  const verticalArcPoints = useMemo(() => generateVerticalArcPoints(ORBIT_RADIUS), []);
   const horizontalSpherePos = useMemo(() => getHorizontalPosition(rotation, ORBIT_RADIUS), [rotation]);
-  const verticalSpherePos = useMemo(() => getVerticalPosition(tilt, ORBIT_RADIUS), [tilt]);
   const onDragEnd = useCallback(
     (type: "rotation" | "tilt", angle: number) => {
       if (type === "rotation") onRotationChange(angle);
@@ -269,47 +251,31 @@ function Scene({ imageUrl, rotation, tilt, onRotationChange, onTiltChange }: Sce
 
   return (
     <>
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[5, 10, 5]} intensity={0.8} />
-      <pointLight position={[-3, 5, 3]} intensity={0.45} />
+      <ambientLight intensity={0.55} />
+      <directionalLight position={[0.5, 2.8, 1.8]} intensity={0.7} />
+      <mesh>
+        <sphereGeometry args={[2.35, 40, 40]} />
+        <meshStandardMaterial color="#8a8a8a" transparent opacity={0.26} />
+      </mesh>
 
-      <Grid
-        args={[12, 12]}
-        cellSize={0.25}
-        cellThickness={0.3}
-        cellColor="#3a4a5a"
-        sectionSize={2}
-        sectionThickness={0.5}
-        sectionColor="#4a5a6a"
-        fadeDistance={20}
-        fadeStrength={1.5}
-        position={[0, -0.01, 0]}
-      />
-
-      <Line points={horizontalArcPoints} color="#4ade80" lineWidth={4} />
-      <Line points={verticalArcPoints} color="#ec4899" lineWidth={4} />
+      <mesh position={[0, 0, 0]}>
+        <circleGeometry args={[2.34, 80]} />
+        <meshBasicMaterial color="#767676" transparent opacity={0.2} />
+      </mesh>
 
       <ImagePlane imageUrl={imageUrl} />
 
+      <LightCone from={horizontalSpherePos} to={new THREE.Vector3(0, 0.5, 0)} />
+
       <DraggableSphere
         position={horizontalSpherePos}
-        color="#22d3ee"
+        color="#050505"
         type="rotation"
         liveAngles={liveAngles}
         onDragEnd={onDragEnd}
         isDragging={dragging === "rotation"}
         setDragging={setDragging}
       />
-      <DraggableSphere
-        position={verticalSpherePos}
-        color="#ec4899"
-        type="tilt"
-        liveAngles={liveAngles}
-        onDragEnd={onDragEnd}
-        isDragging={dragging === "tilt"}
-        setDragging={setDragging}
-      />
-      <CameraIndicator liveAngles={liveAngles} />
     </>
   );
 }
