@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState, useEffect, Suspense } from "react";
-import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
+import { Handle, Position, NodeProps, Node, NodeToolbar, useReactFlow } from "@xyflow/react";
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { BaseNode } from "../shared/BaseNode";
@@ -15,6 +15,8 @@ import { MediaInputNodeData, type MediaInputMode } from "@/types";
 import { calculateNodeSizeForFullBleed, getVideoDimensions, SQUARE_SIZE } from "@/utils/nodeDimensions";
 import { NodeVideoPlayer } from "../shared/NodeVideoPlayer";
 import { UploadToolbar } from "./UploadToolbar";
+import { OrbitCameraControl } from "../generate/OrbitCameraControl";
+import { loadNodeDefaults } from "@/store/utils/localStorage";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
@@ -131,6 +133,15 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
   const { openViewer } = useMediaViewer();
   const [autoRotate, setAutoRotate] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
+  const [cameraPanelOpen, setCameraPanelOpen] = useState(false);
+  const [cameraPrompt, setCameraPrompt] = useState("");
+  const [cameraSettings, setCameraSettings] = useState({
+    rotation: 0,
+    tilt: 0,
+    zoom: 100,
+    wideAngle: false,
+  });
+  const [isGeneratingCameraAngle, setIsGeneratingCameraAngle] = useState(false);
   const glbCaptureRef = useRef<(() => string | null) | null>(null);
   const glbViewportRef = useRef<HTMLDivElement>(null);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
@@ -435,6 +446,82 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
   }, [getNodes, id, mode, nodeData.image, nodeData.videoFile, openViewer]);
 
   const hasContent = !!(nodeData.image || nodeData.audioFile || nodeData.videoFile || nodeData.glbUrl);
+
+  const buildCameraAnglePrompt = useCallback(() => {
+    const parts = [
+      "Generate a new camera angle from the input image while preserving the same subject and scene identity.",
+      `Rotation: ${cameraSettings.rotation} degrees.`,
+      `Tilt: ${cameraSettings.tilt} degrees.`,
+      `Zoom: ${cameraSettings.zoom} percent.`,
+      cameraSettings.wideAngle ? "Use a wide-angle lens look." : "Use a standard lens look.",
+    ];
+    if (cameraPrompt.trim()) parts.push(cameraPrompt.trim());
+    return parts.join(" ");
+  }, [cameraPrompt, cameraSettings]);
+
+  const resolveCameraAngleModel = useCallback(() => {
+    const cfg = loadNodeDefaults();
+    const camera = cfg.cameraAngleControl;
+    const image = cfg.generateImage;
+    const cameraModels = camera?.selectedModels?.length
+      ? camera.selectedModels
+      : camera?.selectedModel
+        ? [camera.selectedModel]
+        : [];
+    if (cameraModels.length > 0) {
+      const idx = camera?.defaultModelIndex ?? 0;
+      return cameraModels[idx] ?? cameraModels[0] ?? null;
+    }
+    const imageModels = image?.selectedModels?.length
+      ? image.selectedModels
+      : image?.selectedModel
+        ? [image.selectedModel]
+        : [];
+    const idx = image?.defaultModelIndex ?? 0;
+    return imageModels[idx] ?? imageModels[0] ?? null;
+  }, []);
+
+  const handleGenerateCameraAngle = useCallback(async () => {
+    if (mode !== "image" || !nodeData.image || isGeneratingCameraAngle) return;
+    setIsGeneratingCameraAngle(true);
+    try {
+      const selectedModel = resolveCameraAngleModel();
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          images: [nodeData.image],
+          prompt: buildCameraAnglePrompt(),
+          aspectRatio: "1:1",
+          resolution: "2K",
+          model: "nano-banana-pro",
+          useGoogleSearch: false,
+          useImageSearch: false,
+          selectedModel: selectedModel ?? undefined,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result?.success || !result?.image) {
+        throw new Error(result?.error || `HTTP ${response.status}`);
+      }
+      const img = new Image();
+      img.onload = () => {
+        updateNodeData(id, {
+          image: result.image,
+          imageRef: undefined,
+          dimensions: { width: img.width, height: img.height },
+        });
+      };
+      img.src = result.image;
+      useToast.getState().show("New camera angle applied", "success");
+      setCameraPanelOpen(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to generate camera angle";
+      useToast.getState().show(message, "error");
+    } finally {
+      setIsGeneratingCameraAngle(false);
+    }
+  }, [mode, nodeData.image, isGeneratingCameraAngle, resolveCameraAngleModel, buildCameraAnglePrompt, updateNodeData, id]);
   const getOutputHandle = () => {
     if (mode === "image") return { id: "image", type: "image" as const };
     if (mode === "audio") return { id: "audio", type: "audio" as const };
@@ -450,6 +537,7 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
           nodeId={id}
           hasImage={mode === "image" ? !!nodeData.image : !!nodeData.videoFile}
           onReplaceClick={handleReplace}
+          onCameraAngleClick={() => setCameraPanelOpen((v) => !v)}
           onDownloadClick={undefined}
           onFullscreenClick={handleFullscreen}
           mode={mode === "video" ? "video" : "image"}
@@ -711,6 +799,71 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
         </>
       )}
     </BaseNode>
+
+      {mode === "image" && !!nodeData.image && cameraPanelOpen && (
+        <NodeToolbar nodeId={id} position={Position.Bottom} align="center" offset={10} className="nodrag nopan" style={{ pointerEvents: "auto" }}>
+          <div className="w-[420px] rounded-2xl border border-neutral-700/80 bg-neutral-900/95 p-3 shadow-2xl backdrop-blur-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-sm font-medium text-neutral-100">3D Camera Control</div>
+              <button
+                type="button"
+                onClick={() => {
+                  setCameraSettings({ rotation: 0, tilt: 0, zoom: 100, wideAngle: false });
+                  setCameraPrompt("");
+                }}
+                className="rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1 text-[11px] text-neutral-300 hover:bg-neutral-700"
+              >
+                Reset
+              </button>
+            </div>
+
+            <OrbitCameraControl
+              imageUrl={nodeData.image}
+              rotation={cameraSettings.rotation}
+              tilt={cameraSettings.tilt}
+              onRotationChange={(rotation) => setCameraSettings((prev) => ({ ...prev, rotation }))}
+              onTiltChange={(tilt) => setCameraSettings((prev) => ({ ...prev, tilt }))}
+            />
+
+            <div className="mt-2 space-y-2">
+              <label className="block">
+                <div className="mb-1 text-[11px] text-neutral-400">Zoom ({cameraSettings.zoom}%)</div>
+                <input
+                  type="range"
+                  min={50}
+                  max={200}
+                  step={1}
+                  value={cameraSettings.zoom}
+                  onChange={(e) => setCameraSettings((prev) => ({ ...prev, zoom: Number(e.target.value) }))}
+                  className="w-full"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-[11px] text-neutral-300">
+                <input
+                  type="checkbox"
+                  checked={cameraSettings.wideAngle}
+                  onChange={(e) => setCameraSettings((prev) => ({ ...prev, wideAngle: e.target.checked }))}
+                />
+                Wide-angle lens
+              </label>
+              <textarea
+                value={cameraPrompt}
+                onChange={(e) => setCameraPrompt(e.target.value)}
+                placeholder="Optional camera instruction"
+                className="nodrag nopan min-h-16 w-full resize-none rounded-lg border border-neutral-700 bg-neutral-800 p-2 text-[11px] text-white placeholder:text-neutral-500"
+              />
+              <button
+                type="button"
+                onClick={() => void handleGenerateCameraAngle()}
+                disabled={isGeneratingCameraAngle}
+                className="w-full rounded-xl bg-white py-2 text-sm font-medium text-neutral-900 hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isGeneratingCameraAngle ? "Generating..." : "Generate New Angle"}
+              </button>
+            </div>
+          </div>
+        </NodeToolbar>
+      )}
 
       {/* Handles rendered outside overflow-hidden so they stay connectable after Replace */}
       {mode === "image" && (

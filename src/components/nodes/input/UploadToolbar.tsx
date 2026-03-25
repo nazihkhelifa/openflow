@@ -19,6 +19,7 @@ interface UploadToolbarProps {
   nodeId: string;
   hasImage: boolean;
   onReplaceClick: () => void;
+  onCameraAngleClick?: () => void;
   onDownloadClick?: () => void;
   onFullscreenClick?: () => void;
   /** When "video", show video-centric tools instead of image tools */
@@ -33,6 +34,7 @@ export function UploadToolbar({
   nodeId,
   hasImage,
   onReplaceClick,
+  onCameraAngleClick,
   onDownloadClick,
   onFullscreenClick,
   mode = "image",
@@ -53,6 +55,7 @@ export function UploadToolbar({
     const idx = upscale?.defaultModelIndex ?? 0;
     return models[idx] ?? models[0] ?? null;
   };
+
 
   const handleUpscaleImage = async () => {
     if (!hasImage || mode !== "image") return;
@@ -102,6 +105,12 @@ export function UploadToolbar({
     } catch {
       useToast.getState().show("Upscale run failed to start", "error");
     }
+  };
+
+  const handleCameraAngleControl = () => {
+    if (!hasImage || mode !== "image") return;
+    onCameraAngleClick?.();
+    setToolsOpen(false);
   };
   const handleSplitIntoGrid = async (rows: number, cols: number) => {
     if (!hasImage || mode !== "image") return;
@@ -331,6 +340,22 @@ export function UploadToolbar({
                         </svg>
                       </div>
                       <span className="flex-1">Upscale</span>
+                    </div>
+                  </button>
+
+                  {/* 3D Camera Angle */}
+                  <button
+                    type="button"
+                    onClick={handleCameraAngleControl}
+                    className="relative flex h-10 cursor-pointer select-none items-center rounded-xl p-2 outline-none hover:bg-white/5"
+                  >
+                    <div className="flex flex-1 items-center gap-2">
+                      <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-lg bg-neutral-800 p-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 7.5 12 2.25 3 7.5m18 0-9 5.25m9-5.25v9L12 21.75m0-9L3 7.5m9 5.25v9M3 7.5v9l9 5.25" />
+                        </svg>
+                      </div>
+                      <span className="flex-1">3D Camera Angle</span>
                     </div>
                   </button>
 

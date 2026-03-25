@@ -327,9 +327,9 @@ export function OrbitCameraControl({
         <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Rotation</span>
         <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-pink-400" /> Vertical Tilt</span>
       </div>
-      <div className="nodrag nopan h-[220px] w-full overflow-hidden rounded-xl border border-neutral-700/70 bg-[#1a1a2e]">
+      <div className="nodrag nopan h-[170px] w-full overflow-hidden rounded-xl border border-neutral-700/70 bg-[#2B2B2B]">
         <Canvas camera={{ position: [3.5, 2.5, 4.5], fov: 55, near: 0.1, far: 100 }} gl={{ antialias: true }}>
-          <color attach="background" args={["#1a1a2e"]} />
+          <color attach="background" args={["#2B2B2B"]} />
           <Scene
             imageUrl={imageUrl}
             rotation={rotation}

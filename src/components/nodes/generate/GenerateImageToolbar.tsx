@@ -162,19 +162,6 @@ export function GenerateImageToolbar({ nodeId }: GenerateImageToolbarProps) {
     return { defaultUpscaleModels: models, defaultUpscaleModelIndex: idx };
   }, []);
 
-  const { defaultCameraAngleModels, defaultCameraAngleModelIndex } = useMemo(() => {
-    const cfg = loadNodeDefaults();
-    const d = cfg.cameraAngleControl;
-    const models =
-      d?.selectedModels?.length
-        ? d.selectedModels
-        : d?.selectedModel
-          ? [d.selectedModel]
-          : [];
-    const idx = Math.min(d?.defaultModelIndex ?? 0, Math.max(0, models.length - 1));
-    return { defaultCameraAngleModels: models, defaultCameraAngleModelIndex: idx };
-  }, []);
-
   const {
     provider,
     modelId,
@@ -263,42 +250,6 @@ export function GenerateImageToolbar({ nodeId }: GenerateImageToolbarProps) {
     } catch {
       useToast.getState().show("Upscale run failed to start", "error");
     }
-  };
-
-  const handleCameraAngleControl = () => {
-    if (!hasImage || !data.outputImage) return;
-    const selectedModel =
-      defaultCameraAngleModels[defaultCameraAngleModelIndex] ??
-      defaultImageModels[defaultModelIndex] ??
-      null;
-    const baseX =
-      node.position.x +
-      (typeof node.style?.width === "number" ? (node.style.width as number) : 300) +
-      80;
-    const baseY = node.position.y + 40;
-
-    const newId = addNode(
-      "cameraAngleControl",
-      { x: baseX, y: baseY },
-      {
-        customTitle: "Camera Angle",
-        inputImages: [data.outputImage],
-        selectedModel: selectedModel ?? data.selectedModel,
-      }
-    );
-
-    addEdgeWithType(
-      {
-        source: nodeId,
-        target: newId,
-        sourceHandle: "image",
-        targetHandle: "image",
-      },
-      "image"
-    );
-
-    setToolsOpen(false);
-    useToast.getState().show("Camera Angle Control node added", "success");
   };
 
   const stopProp = (e: React.MouseEvent | React.PointerEvent) =>
@@ -568,17 +519,6 @@ export function GenerateImageToolbar({ nodeId }: GenerateImageToolbarProps) {
                       </svg>
                     </div>
                     <span className="flex-1">Upscale</span>
-                  </div>
-                </button>
-
-                <button type="button" onClick={handleCameraAngleControl} className="relative flex h-9 items-center rounded-xl p-2 hover:bg-white/5">
-                  <div className="flex flex-1 items-center gap-2">
-                    <div className="flex h-6 w-6 items-center justify-center overflow-hidden rounded-lg bg-neutral-800 p-1.5">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 7.5 12 2.25 3 7.5m18 0-9 5.25m9-5.25v9L12 21.75m0-9L3 7.5m9 5.25v9M3 7.5v9l9 5.25" />
-                      </svg>
-                    </div>
-                    <span className="flex-1">3D Camera Angle</span>
                   </div>
                 </button>
 
