@@ -524,7 +524,48 @@ def _materialize_attachment_operations(
     """
     if not attachments:
         return operations
+
     by_id = {a["id"]: a for a in attachments}
+    single_attachment = attachments[0] if len(attachments) == 1 else None
+
+    def _resolve_attachment_for_media_input(data: Dict[str, Any]) -> Optional[Dict[str, str]]:
+        # Planner should ideally emit exactly data.imageFromAttachmentId using one of the known attachment ids.
+        # In practice it may emit a slightly different value (whitespace, numeric index, filename match, etc.).
+        # We use safe heuristics so the UI still receives data.image.
+        raw_id = (
+            data.get("imageFromAttachmentId")
+            or data.get("imageAttachmentId")
+            or data.get("imageAttachmentID")
+            or data.get("attachmentId")
+            or data.get("imageAttachmentID")
+        )
+        att_id = str(raw_id).strip() if isinstance(raw_id, str) and str(raw_id).strip() else None
+
+        if att_id:
+            # Exact id match (most reliable).
+            if att_id in by_id:
+                return by_id[att_id]
+
+            # Numeric index fallback: planner may say "0"/"1" for attachment order.
+            if att_id.isdigit():
+                idx = int(att_id)
+                if 0 <= idx < len(attachments):
+                    return attachments[idx]
+
+            # Filename match fallback (if planner set data.filename).
+            filename = data.get("filename")
+            if isinstance(filename, str) and filename.strip():
+                want = filename.strip().toLowerCase()
+                for a in attachments:
+                    if str(a.get("name") or "").strip().toLowerCase() == want:
+                        return a
+
+        # If planner didn't provide a usable id, and only one attachment exists, use it.
+        if single_attachment:
+            return single_attachment
+
+        return None
+
     out: List[Dict[str, Any]] = []
     for op in operations:
         if (
@@ -534,14 +575,28 @@ def _materialize_attachment_operations(
             and isinstance(op.get("data"), dict)
         ):
             data = dict(op["data"])
-            att_id = data.get("imageFromAttachmentId")
-            if isinstance(att_id, str) and att_id in by_id:
-                att = by_id[att_id]
+
+            # Only overwrite when we don't already have image payload.
+            if not isinstance(data.get("image"), str) or not data.get("image"):
+                att = _resolve_attachment_for_media_input(data)
+            else:
+                att = None
+
+            if att:
                 data["mode"] = "image"
                 data["image"] = att["dataUrl"]
                 if not data.get("filename"):
                     data["filename"] = att["name"]
-                data.pop("imageFromAttachmentId", None)
+
+                # Remove planner-only indirection fields.
+                for k in (
+                    "imageFromAttachmentId",
+                    "imageAttachmentId",
+                    "imageAttachmentID",
+                    "attachmentId",
+                ):
+                    if k in data:
+                        data.pop(k, None)
                 out.append({**op, "data": data})
                 continue
         out.append(op)
@@ -1919,19 +1974,123 @@ def _run_planner_stage(
     return decomposition, stage_index, current_stage_instruction, planner_message
 
 
-def _run_prompt_specialist_stage(planner_message: str, canvas_state_memory: Dict[str, Any]) -> str:
-    """Subagent stage: prompt behavior shaping before builder stage."""
-    _emit_progress("subagent_prompt_specialist", "preparing planning prompt")
-    if not canvas_state_memory:
-        return planner_message
-    # Keep message stable while still signaling stateful continuity.
-    updated_at = canvas_state_memory.get("updatedAt")
+def _run_prompt_specialist_stage(
+    planner_message: str,
+    canvas_state_memory: Dict[str, Any],
+    workflow_state: Optional[Dict[str, Any]] = None,
+    intent_signals: Optional["UserIntentSignalsModel"] = None,
+    attachments: Optional[List[Dict[str, str]]] = None,
+    model_catalog: Optional[Dict[str, List[Dict[str, str]]]] = None,
+) -> str:
+    """Subagent stage: rule-based prompt enrichment before builder stage.
+
+    Injects a structured planning-context block into the planner message so the
+    builder has clear modality hints, topology strategy, execution targets, and
+    canvas-state guidance without needing an extra LLM call.
+    """
+    _emit_progress("subagent_prompt_specialist", "enriching planning context")
+
+    hints: List[str] = []
+
+    # ── 1. Canvas state hints ─────────────────────────────────────────────────
+    nodes = (workflow_state or {}).get("nodes") or []
+    node_count = len([n for n in nodes if isinstance(n, dict)])
+    updated_at = (canvas_state_memory or {}).get("updatedAt")
+
+    if node_count == 0:
+        hints.append("Canvas is empty — build a fresh minimal workflow from scratch.")
+    elif node_count <= 2:
+        hints.append(f"Canvas has {node_count} node(s). Small graph — extend carefully, prefer addNode over replacing existing.")
+    elif node_count <= 6:
+        hints.append(f"Canvas has {node_count} nodes. Moderate graph — reuse existing nodes before adding new ones.")
+    else:
+        hints.append(f"Canvas has {node_count} nodes. Large graph — prefer targeted updateNode/addEdge/removeEdge over rebuilding. Use clearCanvas only if user explicitly asked to reset.")
+
     if isinstance(updated_at, int):
-        return (
-            planner_message
-            + f"\n\nCanvas state memory timestamp: {updated_at}. Reuse existing graph where possible and apply minimal edits."
-        )
-    return planner_message
+        hints.append(f"Canvas state memory available (timestamp {updated_at}). Prefer minimal delta edits.")
+
+    # ── 2. Modality detection ─────────────────────────────────────────────────
+    msg_lower = planner_message.lower()
+
+    wants_video = any(k in msg_lower for k in ["video", "animate", "animation", "motion", "cinematic clip", "reel", "footage"])
+    wants_audio = any(k in msg_lower for k in ["audio", "music", "sound", "sfx", "voiceover", "soundtrack", "song"])
+    wants_3d = any(k in msg_lower for k in ["3d", "mesh", "glb", "three-d", "three d", "3-d"])
+    wants_image = any(k in msg_lower for k in ["image", "photo", "poster", "illustration", "render", "picture", "generate", "create", "make", "design", "banner", "thumbnail"])
+
+    modalities: List[str] = []
+    if wants_video:
+        modalities.append("video")
+    if wants_audio:
+        modalities.append("audio")
+    if wants_3d:
+        modalities.append("3d")
+    if wants_image or (not modalities):
+        modalities.append("image")  # default if nothing else detected
+
+    if len(modalities) == 1:
+        hints.append(f"Primary modality detected: {modalities[0]}.")
+    else:
+        hints.append(f"Multi-modal request detected: {', '.join(modalities)}. Build separate generation lanes per modality.")
+
+    # ── 3. Topology strategy hints ────────────────────────────────────────────
+    wants_variants = any(k in msg_lower for k in ["variation", "variant", "option", "alternative", "version", "a/b", "moodboard", "3 ", "4 ", "5 ", "6 "])
+    wants_chain = any(k in msg_lower for k in ["then", "after", "next", "refine", "upscale", "polish", "enhance", "from the result", "use that"])
+    wants_conditional = any(k in msg_lower for k in ["if ", "condition", "switch", "route", "auto", "based on", "depends on"])
+    wants_annotate = any(k in msg_lower for k in ["document", "label", "annotate", "organize", "readable", "clean"])
+
+    if wants_variants and wants_chain:
+        hints.append("Topology: hybrid — parallel variant branches with downstream chaining. Branch first, then chain each branch's output.")
+    elif wants_variants:
+        hints.append("Topology: parallel branches. Create one prompt + one generation node per variant. Run all generation nodes together.")
+    elif wants_chain:
+        hints.append("Topology: serial chain. Each stage uses the prior output as input. Execute stage by stage.")
+    elif wants_conditional:
+        hints.append("Topology: conditional. Use router/switch/conditionalSwitch node for branching logic. Add annotation nodes to document routing rules.")
+    else:
+        hints.append("Topology: single pipeline. Minimal straight-line workflow unless user specifies otherwise.")
+
+    if wants_annotate or node_count >= 6:
+        hints.append("Add annotation nodes as stage labels for readability. Use comment nodes for per-node tips.")
+
+    # ── 4. Execution intent hints ─────────────────────────────────────────────
+    if intent_signals is not None:
+        if getattr(intent_signals, "asksExecuteNodes", False):
+            hints.append("User wants output NOW — set executeNodeIds to the terminal generation node(s).")
+        if getattr(intent_signals, "asksPromptExtractFromImageOnly", False):
+            hints.append("User wants prompt text only — do NOT emit mediaInput or graph ops. Return text in assistantText.")
+        if getattr(intent_signals, "planEditRequest", False):
+            hints.append("User is editing an existing plan/stage — apply targeted updates, preserve working upstream structure.")
+
+    # ── 5. Attachment hints ───────────────────────────────────────────────────
+    att_count = len(attachments) if attachments else 0
+    if att_count == 1:
+        hints.append("1 image attachment: use as reference (wire via image/reference edge) unless user asked for prompt extraction only.")
+    elif att_count > 1:
+        hints.append(f"{att_count} image attachments: assign distinct roles (style ref, content ref, subject ref). Wire each via appropriate handle.")
+
+    # ── 6. Video-specific hints ───────────────────────────────────────────────
+    if wants_video:
+        hints.append("For video generation: include motion direction, camera movement, pacing, and duration in the generateVideo prompt field.")
+        ease_words = ["ease", "spring", "smooth", "accelerat", "decelerat", "slow in", "slow out"]
+        if any(k in msg_lower for k in ease_words):
+            hints.append("Easing requested: add easeCurve node and wire easeCurve.easeCurve → generateVideo.easeCurve.")
+
+    # ── 7. 3D-specific hints ──────────────────────────────────────────────────
+    if wants_3d:
+        hints.append("For 3D generation: add generate3d node + glbViewer node. Wire generate3d.3d → glbViewer.3d.")
+
+    # ── 8. Variant count precision ────────────────────────────────────────────
+    count_match = re.search(r'\b([2-9]|1[0-2])\s*(variation|variant|option|version|look|branch|alternative)', msg_lower)
+    if count_match:
+        n = int(count_match.group(1))
+        hints.append(f"Exact variant count: {n}. Build exactly {n} parallel branches — no more, no less.")
+
+    # ── Assemble enriched message ─────────────────────────────────────────────
+    if not hints:
+        return planner_message
+
+    context_block = "\n\n## Planning Context (from prompt specialist)\n" + "\n".join(f"- {h}" for h in hints)
+    return planner_message + context_block
 
 
 def _run_builder_stage(
@@ -2342,6 +2501,10 @@ def main() -> None:
         planner_message = _run_prompt_specialist_stage(
             planner_message=planner_message,
             canvas_state_memory=canvas_state_memory,
+            workflow_state=workflow_state,
+            intent_signals=intent_signals,
+            attachments=attachments,
+            model_catalog=model_catalog,
         )
         parsed, validated_ok, last_errors, last_text_debug = _run_builder_stage(
             model=model,

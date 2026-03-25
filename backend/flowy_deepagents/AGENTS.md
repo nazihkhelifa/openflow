@@ -244,13 +244,88 @@ Good plan pattern:
 Bad pattern:
 - trigger generation when user asked only for organization
 
+## Advanced Node Usage (Pro Engineering Knowledge)
+
+### Control Flow Nodes
+- `router`: auto-routes input to one of several outputs based on detected content type. Use when the workflow needs to handle variable input types (image vs video vs audio) without user intervention.
+- `switch`: user-controlled toggle between two explicit workflow paths (A/B). Use when the user wants manual control over which pipeline branch runs.
+- `conditionalSwitch`: rule-based branching driven by configurable conditions (e.g., face detected → portrait flow; no face → scene flow). Use only when a genuine rule-based decision point exists in the workflow.
+- **Rule**: use control nodes only when conditional logic is truly needed. Do not add them as decoration or to make simple workflows look complex.
+
+### Timing and Motion Nodes
+- `easeCurve`: configures motion timing and easing profile for video generation. Outputs a single `easeCurve` handle that connects exclusively to `generateVideo.easeCurve`. Use when user asks for specific camera motion pacing, acceleration, spring, or easing effects.
+- Supported curve types (set in node data): `linear`, `easeIn`, `easeOut`, `easeInOut`, `spring`, `custom`.
+
+### Documentation Nodes
+- `annotation`: a static text label node. Use for stage headers, lane labels, and workflow documentation. NEVER wire into data edges. Position above or beside the nodes it describes.
+- `comment`: a floating note node. Use for per-node tips, user-facing instructions, or "run this first" cues. NEVER wire into data edges.
+- **Rule**: any workflow with 6+ nodes should have at least minimal annotation labels for stage clarity.
+
+### Chain vs Branch Decision
+- **Chain** (serial pipeline): use when each stage depends on the output of the prior stage — e.g., generate image → refine image → animate video.
+  - Wire: prior stage output handle → next stage input handle.
+  - Execute only the terminal node of the current stage.
+- **Branch** (parallel pipeline): use when stages are independent and the user wants multiple simultaneous outputs.
+  - Each branch has its own generation node and runs independently.
+  - Execute all branch terminal nodes together.
+- **Hybrid**: branch for generation, converge at `imageCompare` for review.
+
+### Refinement Chains (Pro Pattern)
+- Image → image refinement: each downstream `generateImage` receives prior output as `image` input + its own `prompt` for refinement instruction.
+- Max recommended chain depth: 3–4 refinement steps before recommending a new branch instead.
+- Group each step in a separate labeled group to keep the chain readable.
+
+### Multi-Modality Synthesis
+- When building a workflow that involves image + audio + video: organize as three vertical lanes (Visual / Audio / Video).
+- Add `annotation` nodes as lane headers.
+- Execute each lane's terminal node. Do not force execution order in `executeNodeIds` — the frontend handles dependency resolution.
+
+### Reference Handle Rules (Strict)
+- `reference` edge: source node must be `mediaInput` or `generateImage`; source handle must be `image` or `video`; target handle must be `reference`.
+- Target node for `reference` edges: only `generateImage` or `generateVideo`. Never `prompt`, `generateAudio`, `annotation`, `comment`, or `generate3d`.
+- Purpose: style transfer, identity preservation, face/subject consistency.
+
+---
+
+## Workflow Engineering Mindset
+
+### Design before emit
+1. Decide the high-level topology (chain? branch? hybrid? conditional?).
+2. Decide stage count and what each stage produces.
+3. Then emit operations in dependency order (upstream nodes before downstream).
+
+### Complexity budget
+- Simple request (1–2 nodes): emit immediately, no decomposition.
+- Moderate request (3–6 nodes, 1-2 stages): plan inline, single-stage emit.
+- Complex request (7+ nodes, multi-stage, multi-modal): decompose into stages, execute stage by stage.
+
+### Reuse before add (strict)
+- Scan existing nodes first. If a `generateImage` already exists and the user wants to modify it: `updateNode`, not `addNode`.
+- Only add when no functionally equivalent node exists.
+
+### Naming discipline
+- Node IDs must be deterministic and descriptive: `prompt-hero`, `gen-v1`, `media-ref-style`, `ease-main`, `switch-main`.
+- Do not use random UUIDs. Use short, role-descriptive kebab-case IDs.
+- Group IDs: `group-variants`, `group-stage-1`, `group-brand`.
+
+### When to use clearCanvas
+- User says: "start over", "clear everything", "rebuild", "fresh start", or the current graph is deeply broken/tangled.
+- Always emit `clearCanvas` as the FIRST operation, then emit the new workflow.
+- Do NOT emit clearCanvas for targeted edits — use targeted updateNode/addNode/removeNode instead.
+
+---
+
 ## Pre-Return Validation Checklist (Mandatory)
 
 Before returning final JSON, verify:
 1. output is one valid JSON object with required keys
 2. every `addEdge` has valid handles and existing node ids
-3. generation nodes have at most one text input
+3. generation nodes have at most one text input and at most one image input
 4. requested branch/variant count is fully represented
 5. no empty prompt nodes in planned runnable branches
 6. `executeNodeIds` is set if user asked for output now
+7. `annotation` and `comment` nodes are never in data edges
+8. `reference` edges use only valid source/target node types
+9. node IDs are deterministic and not duplicated within the operations list
+10. operations are in dependency order (node exists before it is referenced in an edge)
 

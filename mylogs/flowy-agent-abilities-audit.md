@@ -262,3 +262,99 @@ Fix:
   - Added extra safe-casting when rendering `cx/cy` circles.
 - Added regression test:
   - `src/components/__tests__/EditableEdge.test.tsx` covers NaN input and asserts no `console.error`.
+
+---
+
+## Iteration 3 — Pro Workflow Engineer Upgrade (2026-03-25)
+
+Goal: make the agent capable of creating ANY type of workflow a user may ask for — acting as a senior workflow developer/engineer.
+
+### Changes applied
+
+#### `backend/flowy_deepagents/WORKFLOW_TEMPLATES.md` — major rewrite
+- Expanded from 7 templates to 20 templates covering:
+  - All existing basic patterns (text→image, variations, image→video, full pipeline, reference edit, audio, 3D).
+  - Conditional/decision-based workflows using `router`, `switch`, `conditionalSwitch`.
+  - Iterative refinement chains (image→refine→refine→upscale).
+  - Multi-source reference workflows (style ref + content ref + subject ref).
+  - Brand/style consistency pipelines.
+  - Full multimodal synthesis (image + audio + video in three parallel lanes).
+  - Batch/high-count variant generation (4–8 variants, grid layout).
+  - Ease curve → video motion control.
+  - A/B decision preview with `switch` + `imageCompare`.
+  - Annotation-documented complex workflows.
+  - Upscale/post-process chains.
+  - Frame extraction + restyle.
+  - Prompt-only extraction mode (no graph mutation).
+  - Minimal reset + rebuild with `clearCanvas`.
+- Added `TOPOLOGY RULES` section: spatial layout defaults, group color semantics, wiring discipline, chain vs branch decision tree, execution targeting rules.
+
+#### `backend/flowy_deepagents/AGENTS.md` — advanced engineering sections added
+- New `Advanced Node Usage` section:
+  - `router`, `switch`, `conditionalSwitch` usage rules and when to apply each.
+  - `easeCurve` node: supported curve types, wiring to `generateVideo.easeCurve`.
+  - `annotation` and `comment` documentation nodes: placement rules, never wire into data edges.
+  - Chain vs Branch decision criteria.
+  - Refinement chain depth limits.
+  - Multi-modality synthesis lane organization.
+  - `reference` handle strict enforcement rules.
+- New `Workflow Engineering Mindset` section:
+  - Design before emit: topology → stage count → operations.
+  - Complexity budget (simple/moderate/complex thresholds).
+  - Reuse-before-add strict rule.
+  - Naming discipline for deterministic node IDs.
+  - When to use `clearCanvas`.
+- Expanded `Pre-Return Validation Checklist` from 6 to 10 items (added: single image input per gen node, annotation not in data edges, reference edge source/target constraints, deterministic IDs, dependency-ordered operations).
+
+#### `backend/flowy_deepagents/GOAL_DECOMPOSER.md` — concrete examples added
+- Added 6 concrete decomposition examples (A–F):
+  - A: no decomposition (simple text-to-image).
+  - B: no decomposition (parallel variants).
+  - C: yes decomposition (chained modalities: image then video).
+  - D: yes decomposition (complex multi-modal campaign: image + variants + video + audio + organize).
+  - E: yes decomposition (refinement chain: base → lighting → upscale).
+  - F: no decomposition (organization-only).
+
+#### `backend/flowy_deepagents/content_writer.py` — prompt specialist stage upgraded
+- `_run_prompt_specialist_stage` was a near-stub (only appended a timestamp). Now performs real rule-based enrichment:
+  - Canvas state hints: empty/small/moderate/large graph → targeted guidance on reuse vs rebuild.
+  - Modality detection: scans planner message for video/audio/3d/image keywords → injects modality-specific guidance.
+  - Multi-modal detection: if 2+ modalities detected → hints to build separate generation lanes.
+  - Topology strategy: detects variants/chain/conditional/annotate intent → injects topology pattern recommendation.
+  - Execution intent: if `asksExecuteNodes` → reminds builder to set `executeNodeIds`.
+  - Prompt-extraction-only: if `asksPromptExtractFromImageOnly` → tells builder not to emit graph ops.
+  - Attachment hints: 1 attachment → reference mode hint; N attachments → role assignment guidance.
+  - Video-specific hints: motion direction, camera, pacing, duration reminder; ease curve detection.
+  - 3D hints: generate3d + glbViewer wiring reminder.
+  - Exact variant count extraction: regex detects "N variation/variant/option" → tells builder exact branch count.
+  - Function signature expanded to accept `workflow_state`, `intent_signals`, `attachments`, `model_catalog`.
+  - Call site updated to pass all new parameters.
+
+### Expected effect
+- Agent can now handle complex multi-stage, multi-modal, and conditional workflow requests.
+- Prompt specialist injects structured planning context before every builder invocation, reducing hallucinated topology.
+- Goal decomposer has concrete examples for the LLM to follow for complex requests.
+- Workflow templates cover all standard node combinations including advanced patterns.
+
+---
+
+## Iteration 2.4 Attachment Materialization Fix (UploadNode empty)
+
+Issue observed:
+- When the user attaches images to the chat Flow Agent, the backend can add a `mediaInput` upload node, but the node shows no image.
+
+Root cause (confirmed by code inspection):
+- `UploadNode` renders from `nodeData.image`.
+- `backend/flowy_deepagents/content_writer.py` only populates `data.image` if it can resolve the planner-emitted `data.imageFromAttachmentId` to a real attachment entry.
+- The planner sometimes emits an attachment reference that does not exactly match the backend-known `attachments[].id` (whitespace / numeric index / filename mismatch), so `_materialize_attachment_operations` left `imageFromAttachmentId` unresolved.
+
+Fix applied:
+- Updated `_materialize_attachment_operations` in `backend/flowy_deepagents/content_writer.py` to resolve attachments with safe heuristics:
+  - trim + exact id match
+  - numeric index match (`"0"`, `"1"`, ...)
+  - filename match against `attachments[].name` when `data.filename` is present
+  - single-attachment fallback (when only one attachment exists)
+
+Expected effect:
+- `mediaInput.data.image` will be populated reliably.
+- UploadNode should display the attached images.
