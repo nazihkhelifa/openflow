@@ -802,7 +802,7 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
 
       {mode === "image" && !!nodeData.image && cameraPanelOpen && (
         <NodeToolbar nodeId={id} position={Position.Bottom} align="center" offset={10} className="nodrag nopan" style={{ pointerEvents: "auto" }}>
-          <div className="w-[420px] rounded-2xl border border-neutral-700/80 bg-neutral-900/95 p-3 shadow-2xl backdrop-blur-sm">
+          <div className="w-[360px] rounded-2xl border border-neutral-700/80 bg-neutral-900/95 p-2.5 shadow-2xl backdrop-blur-sm">
             <div className="mb-2 flex items-center justify-between">
               <div className="text-sm font-medium text-neutral-100">3D Camera Control</div>
               <button
