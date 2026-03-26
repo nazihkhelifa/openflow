@@ -49,6 +49,8 @@ export function ImageNode({ id, data, selected }: NodeProps<ImageNodeType>) {
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const updateNodeProps = useWorkflowStore((state) => state.updateNodeProps);
+  const addNode = useWorkflowStore((state) => state.addNode);
+  const addEdgeWithType = useWorkflowStore((state) => state.addEdgeWithType);
   const generationsPath = useWorkflowStore((state) => state.generationsPath);
   const { hasPromptConnection, promptDisplayValue } = useWorkflowStore(
     useShallow((state) => {
@@ -787,10 +789,34 @@ export function ImageNode({ id, data, selected }: NodeProps<ImageNodeType>) {
               <ImageCropOverlay
                 imageUrl={nodeData.outputImage}
                 onCancel={() => updateNodeData(id, { cropMode: false })}
-                onApply={(cropped, _dims) => {
-                  updateNodeData(id, { outputImage: cropped, cropMode: false });
-                  // Keep aspect ratio resize logic happy by updating the current node size on next effect;
-                  // outputImage change already triggers the aspect-resize effect.
+                onApply={(cropped, dims) => {
+                  const node = getNode(id);
+                  const baseX =
+                    (node?.position.x ?? 0) +
+                    (typeof node?.style?.width === "number" ? (node!.style!.width as number) : 300) +
+                    80;
+                  const baseY = node?.position.y ?? 0;
+                  const newId = addNode(
+                    "mediaInput",
+                    { x: baseX, y: baseY },
+                    {
+                      mode: "image",
+                      image: cropped,
+                      imageRef: undefined,
+                      dimensions: dims,
+                      filename: `cropped-${Date.now()}.png`,
+                    }
+                  );
+                  addEdgeWithType(
+                    {
+                      source: id,
+                      target: newId,
+                      sourceHandle: "image",
+                      targetHandle: "reference",
+                    },
+                    "reference"
+                  );
+                  updateNodeData(id, { cropMode: false });
                 }}
               />
             )}

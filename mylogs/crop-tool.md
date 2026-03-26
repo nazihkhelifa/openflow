@@ -13,6 +13,7 @@
   - Crop can be constrained with a **Ratio** selector (Free / 1:1 / 16:9 / etc.).
   - **Enter** applies crop, **Esc** cancels.
 - Applying crop replaces the node image with the cropped PNG data URL.
+- Applying crop creates a **new Upload node** with the cropped PNG and connects it to the source node, so both original + cropped remain.
 
 ## Implementation notes
 - Crop overlay component: `src/components/nodes/shared/ImageCropOverlay.tsx`

@@ -162,6 +162,8 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
           : "image";
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const updateNodeProps = useWorkflowStore((state) => state.updateNodeProps);
+  const addNode = useWorkflowStore((state) => state.addNode);
+  const addEdgeWithType = useWorkflowStore((state) => state.addEdgeWithType);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -700,12 +702,32 @@ export function UploadNode({ id, data, selected }: NodeProps<MediaInputNodeType>
                       imageUrl={resolvedImageUrl}
                       onCancel={() => setCropMode(false)}
                       onApply={(cropped, dims) => {
-                        updateNodeData(id, {
-                          image: cropped,
-                          imageRef: undefined,
-                          dimensions: dims,
-                          filename: displayFilename ? `${displayFilename}-crop.png` : "crop.png",
-                        });
+                        const node = getNode(id);
+                        const baseX =
+                          (node?.position.x ?? 0) +
+                          (typeof node?.style?.width === "number" ? (node!.style!.width as number) : 300) +
+                          80;
+                        const baseY = node?.position.y ?? 0;
+                        const newId = addNode(
+                          "mediaInput",
+                          { x: baseX, y: baseY },
+                          {
+                            mode: "image",
+                            image: cropped,
+                            imageRef: undefined,
+                            dimensions: dims,
+                            filename: displayFilename ? `${displayFilename}-crop.png` : "crop.png",
+                          }
+                        );
+                        addEdgeWithType(
+                          {
+                            source: id,
+                            target: newId,
+                            sourceHandle: "image",
+                            targetHandle: "reference",
+                          },
+                          "reference"
+                        );
                         setCropMode(false);
                       }}
                     />
