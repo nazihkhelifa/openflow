@@ -211,13 +211,6 @@ function ImageEditMenu() {
           </button>
           <button
             type="button"
-            onClick={() => handleAddNode("easeCurve")}
-            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors"
-          >
-            Ease Curve
-          </button>
-          <button
-            type="button"
             onClick={() => handleAddNode("imageCompare")}
             className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors"
           >

@@ -55,6 +55,48 @@ export function GenerateVideoToolbar({
   const hasVideo = !!data?.outputVideo;
 
   const { addNode, addEdgeWithType, nodes } = useWorkflowStore();
+  const onNodesChange = useWorkflowStore((state) => state.onNodesChange);
+
+  const selectOnlyNode = useCallback(
+    (selectedId: string) => {
+      requestAnimationFrame(() => {
+        const currentNodes = useWorkflowStore.getState().nodes;
+        onNodesChange(
+          currentNodes.map((node) => ({
+            id: node.id,
+            type: "select" as const,
+            selected: node.id === selectedId,
+          }))
+        );
+      });
+    },
+    [onNodesChange]
+  );
+
+  const handleCreateEaseCurveNode = useCallback(() => {
+    if (!hasVideo) return;
+    const sourceNode = nodes.find((n) => n.id === nodeId);
+    if (!sourceNode) return;
+
+    const sourceWidth =
+      typeof sourceNode.style?.width === "number" ? (sourceNode.style.width as number) : 300;
+    const easeCurveId = addNode("easeCurve", {
+      x: sourceNode.position.x + sourceWidth + 80,
+      y: sourceNode.position.y,
+    });
+
+    addEdgeWithType(
+      {
+        source: nodeId,
+        target: easeCurveId,
+        sourceHandle: "video",
+        targetHandle: "video",
+      },
+      "video"
+    );
+
+    selectOnlyNode(easeCurveId);
+  }, [addEdgeWithType, addNode, hasVideo, nodeId, nodes, selectOnlyNode]);
 
   const handleExtractVideoFrame = useCallback(
     async (slot: VideoFrameExtractionSlot) => {
@@ -172,6 +214,17 @@ export function GenerateVideoToolbar({
                 <path d="M2 2.5A1.5 1.5 0 0 1 3.5 1H8a.5.5 0 0 1 0 1H3.5a.5.5 0 0 0-.5.5V7a.5.5 0 0 1-1 0V2.5Z" fill="currentColor" />
                 <path d="M11 7a.5.5 0 0 1 .5.5V11a1.5 1.5 0 0 1-1.5 1.5H6.5a.5.5 0 0 1 0-1H10a.5.5 0 0 0 .5-.5V7.5A.5.5 0 0 1 11 7Z" fill="currentColor" />
                 <path d="M9.5 2H12a.5.5 0 0 1 .354.854l-3 3a.5.5 0 0 1-.708-.708L10.293 3H9.5a.5.5 0 0 1 0-1Z" fill="currentColor" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={handleCreateEaseCurveNode}
+              disabled={!hasVideo}
+              className="h-7 w-7 shrink-0 flex items-center justify-center rounded-lg p-1.5 text-neutral-300 hover:bg-white/5 disabled:opacity-50"
+              title="Ease curve"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 17c4 0 4-10 9-10s5 10 9 10" />
               </svg>
             </button>
             <button type="button" onClick={() => hasVideo && setToolsOpen((open) => !open)} disabled={!hasVideo} className="h-7 w-7 shrink-0 flex items-center justify-center rounded-lg p-1.5 text-neutral-300 hover:bg-white/5 disabled:opacity-50" title="More tools">
