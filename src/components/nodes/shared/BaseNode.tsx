@@ -223,7 +223,7 @@ export function BaseNode({
       )}
       <div
         className={`
-          ${hasExpandedSettings ? "flex-1 min-h-0 w-full" : "h-full w-full"} flex flex-col overflow-hidden relative
+          ${hasExpandedSettings ? "flex-1 min-h-0 w-full" : "h-full w-full"} flex flex-col overflow-visible relative
           ${fullBleed
             ? `${settingsExpanded ? "rounded-t-xl border-b-0" : "rounded-xl"} bg-neutral-800/50 border border-neutral-700/40`
             : `bg-neutral-800 ${settingsExpanded ? "rounded-t-xl border-b-0" : "rounded-xl"} shadow-lg border`}
@@ -244,7 +244,7 @@ export function BaseNode({
           setHoveredNodeId(null);
         }}
       >
-        <div className={`${contentClassName ?? (fullBleed ? "flex-1 min-h-0 relative" : "px-3 pb-4 flex-1 min-h-0 flex flex-col")} overflow-hidden relative`}>
+        <div className={`${contentClassName ?? (fullBleed ? "flex-1 min-h-0 relative" : "px-3 pb-4 flex-1 min-h-0 flex flex-col")} overflow-visible relative`}>
           {children}
           {footerLeft && (
             <div className="absolute bottom-2 left-2 z-10">

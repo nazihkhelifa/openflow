@@ -13,285 +13,104 @@ interface MenuOption {
   isAction?: boolean; // true if this is an action, not a node type
 }
 
-// Define which nodes can accept which handle types as inputs
+const GENERIC_ICON = (
+  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5v14" />
+  </svg>
+);
+
 const IMAGE_TARGET_OPTIONS: MenuOption[] = [
-  {
-    type: "annotation",
-    label: "Layer Editor",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-      </svg>
-    ),
-  },
-  {
-    type: "generateImage",
-    label: "Generate Image",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-      </svg>
-    ),
-  },
-  {
-    type: "generateVideo",
-    label: "Generate Video",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
-      </svg>
-    ),
-  },
-  {
-    type: "output",
-    label: "Output",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-      </svg>
-    ),
-  },
-  {
-    type: "outputGallery",
-    label: "Output Gallery",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-      </svg>
-    ),
-  },
-  {
-    type: "imageCompare",
-    label: "Image Compare",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-      </svg>
-    ),
-  },
+  { type: "annotation", label: "Layer Editor", icon: GENERIC_ICON },
+  { type: "prompt", label: "Prompt", icon: GENERIC_ICON },
+  { type: "generateImage", label: "Generate Image", icon: GENERIC_ICON },
+  { type: "cameraAngleControl", label: "Camera Angle", icon: GENERIC_ICON },
+  { type: "generateVideo", label: "Generate Video", icon: GENERIC_ICON },
+  { type: "generate3d", label: "Generate 3D", icon: GENERIC_ICON },
+  { type: "imageCompare", label: "Image Compare", icon: GENERIC_ICON },
+  { type: "router", label: "Router", icon: GENERIC_ICON },
+  { type: "switch", label: "Switch", icon: GENERIC_ICON },
 ];
 
 const TEXT_TARGET_OPTIONS: MenuOption[] = [
-  {
-    type: "prompt",
-    label: "Prompt",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-      </svg>
-    ),
-  },
-  {
-    type: "generateImage",
-    label: "Generate Image",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-      </svg>
-    ),
-  },
-  {
-    type: "generateVideo",
-    label: "Generate Video",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
-      </svg>
-    ),
-  },
-  {
-    type: "generateAudio",
-    label: "Generate Audio",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
-      </svg>
-    ),
-  },
+  { type: "prompt", label: "Prompt", icon: GENERIC_ICON },
+  { type: "generateImage", label: "Generate Image", icon: GENERIC_ICON },
+  { type: "generateVideo", label: "Generate Video", icon: GENERIC_ICON },
+  { type: "generate3d", label: "Generate 3D", icon: GENERIC_ICON },
+  { type: "generateAudio", label: "Generate Audio", icon: GENERIC_ICON },
+  { type: "conditionalSwitch", label: "Conditional Switch", icon: GENERIC_ICON },
+  { type: "router", label: "Router", icon: GENERIC_ICON },
+  { type: "switch", label: "Switch", icon: GENERIC_ICON },
 ];
 
-// Define which nodes can provide sources for handle types (when dragging to a target handle)
 const IMAGE_SOURCE_OPTIONS: MenuOption[] = [
-  {
-    type: "mediaInput",
-    label: "Upload",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-      </svg>
-    ),
-  },
-  {
-    type: "glbViewer",
-    label: "3D Viewer",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-2.25-1.313M21 7.5v2.25m0-2.25l-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3l2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75l2.25-1.313M12 21.75V19.5m0 2.25l-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
-      </svg>
-    ),
-  },
-  {
-    type: "annotation",
-    label: "Layer Editor",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-      </svg>
-    ),
-  },
-  {
-    type: "generateImage",
-    label: "Generate Image",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-      </svg>
-    ),
-  },
+  { type: "mediaInput", label: "Upload", icon: GENERIC_ICON },
+  { type: "annotation", label: "Layer Editor", icon: GENERIC_ICON },
+  { type: "generateImage", label: "Generate Image", icon: GENERIC_ICON },
+  { type: "cameraAngleControl", label: "Camera Angle", icon: GENERIC_ICON },
+  { type: "generate3d", label: "Generate 3D", icon: GENERIC_ICON },
+  { type: "glbViewer", label: "3D Viewer", icon: GENERIC_ICON },
+  { type: "router", label: "Router", icon: GENERIC_ICON },
+  { type: "switch", label: "Switch", icon: GENERIC_ICON },
 ];
 
 const TEXT_SOURCE_OPTIONS: MenuOption[] = [
-  {
-    type: "prompt",
-    label: "Prompt",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-      </svg>
-    ),
-  },
+  { type: "prompt", label: "Prompt", icon: GENERIC_ICON },
+  { type: "conditionalSwitch", label: "Conditional Switch", icon: GENERIC_ICON },
+  { type: "router", label: "Router", icon: GENERIC_ICON },
+  { type: "switch", label: "Switch", icon: GENERIC_ICON },
 ];
 
-// Video can only connect to generateVideo (video-to-video), easeCurve, or output nodes
 const VIDEO_TARGET_OPTIONS: MenuOption[] = [
-  {
-    type: "easeCurve",
-    label: "Ease Curve",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-      </svg>
-    ),
-  },
-  {
-    type: "generateVideo",
-    label: "Generate Video",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
-      </svg>
-    ),
-  },
-  {
-    type: "output",
-    label: "Output",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-      </svg>
-    ),
-  },
+  { type: "easeCurve", label: "Ease Curve", icon: GENERIC_ICON },
+  { type: "generateVideo", label: "Generate Video", icon: GENERIC_ICON },
+  { type: "router", label: "Router", icon: GENERIC_ICON },
+  { type: "switch", label: "Switch", icon: GENERIC_ICON },
 ];
 
-// Upload, GenerateVideo, EaseCurve, etc. produce video output
 const VIDEO_SOURCE_OPTIONS: MenuOption[] = [
-  {
-    type: "mediaInput",
-    label: "Upload",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-      </svg>
-    ),
-  },
-  {
-    type: "generateVideo",
-    label: "Generate Video",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
-      </svg>
-    ),
-  },
-  {
-    type: "easeCurve",
-    label: "Ease Curve",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-      </svg>
-    ),
-  },
+  { type: "mediaInput", label: "Upload", icon: GENERIC_ICON },
+  { type: "generateVideo", label: "Generate Video", icon: GENERIC_ICON },
+  { type: "easeCurve", label: "Ease Curve", icon: GENERIC_ICON },
+  { type: "router", label: "Router", icon: GENERIC_ICON },
+  { type: "switch", label: "Switch", icon: GENERIC_ICON },
 ];
 
-// Audio target options (nodes that accept audio input)
 const AUDIO_TARGET_OPTIONS: MenuOption[] = [
-  {
-    type: "mediaInput",
-    label: "Upload",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
-      </svg>
-    ),
-  },
-  {
-    type: "output",
-    label: "Output",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-      </svg>
-    ),
-  },
+  { type: "mediaInput", label: "Upload", icon: GENERIC_ICON },
+  { type: "router", label: "Router", icon: GENERIC_ICON },
+  { type: "switch", label: "Switch", icon: GENERIC_ICON },
 ];
 
-// Audio source options (nodes that produce audio output)
 const AUDIO_SOURCE_OPTIONS: MenuOption[] = [
-  {
-    type: "mediaInput",
-    label: "Upload",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
-      </svg>
-    ),
-  },
-  {
-    type: "generateAudio",
-    label: "Generate Audio",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
-      </svg>
-    ),
-  },
+  { type: "mediaInput", label: "Upload", icon: GENERIC_ICON },
+  { type: "generateAudio", label: "Generate Audio", icon: GENERIC_ICON },
+  { type: "router", label: "Router", icon: GENERIC_ICON },
+  { type: "switch", label: "Switch", icon: GENERIC_ICON },
 ];
 
-// 3D target options (nodes that accept 3D input)
 const THREE_D_TARGET_OPTIONS: MenuOption[] = [
-  {
-    type: "glbViewer",
-    label: "3D Viewer",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-2.25-1.313M21 7.5v2.25m0-2.25l-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3l2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75l2.25-1.313M12 21.75V19.5m0 2.25l-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
-      </svg>
-    ),
-  },
+  { type: "glbViewer", label: "3D Viewer", icon: GENERIC_ICON },
+  { type: "mediaInput", label: "Upload", icon: GENERIC_ICON },
+  { type: "router", label: "Router", icon: GENERIC_ICON },
+  { type: "switch", label: "Switch", icon: GENERIC_ICON },
 ];
 
-// 3D source options (nodes that produce 3D output)
 const THREE_D_SOURCE_OPTIONS: MenuOption[] = [
-  {
-    type: "generate3d",
-    label: "Generate 3D",
-    icon: (
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-2.25-1.313M21 7.5v2.25m0-2.25l-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3l2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75l2.25-1.313M12 21.75V19.5m0 2.25l-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
-      </svg>
-    ),
-  },
+  { type: "generate3d", label: "Generate 3D", icon: GENERIC_ICON },
+  { type: "router", label: "Router", icon: GENERIC_ICON },
+  { type: "switch", label: "Switch", icon: GENERIC_ICON },
+];
+
+const EASE_CURVE_TARGET_OPTIONS: MenuOption[] = [
+  { type: "easeCurve", label: "Ease Curve", icon: GENERIC_ICON },
+  { type: "router", label: "Router", icon: GENERIC_ICON },
+  { type: "switch", label: "Switch", icon: GENERIC_ICON },
+];
+
+const EASE_CURVE_SOURCE_OPTIONS: MenuOption[] = [
+  { type: "easeCurve", label: "Ease Curve", icon: GENERIC_ICON },
+  { type: "router", label: "Router", icon: GENERIC_ICON },
+  { type: "switch", label: "Switch", icon: GENERIC_ICON },
 ];
 
 interface ConnectionDropMenuProps {
@@ -333,12 +152,14 @@ export function ConnectionDropMenu({
       if (handleType === "video") return VIDEO_TARGET_OPTIONS;
       if (handleType === "audio") return AUDIO_TARGET_OPTIONS;
       if (handleType === "3d") return THREE_D_TARGET_OPTIONS;
+      if (handleType === "easeCurve") return EASE_CURVE_TARGET_OPTIONS;
       return handleType === "image" ? IMAGE_TARGET_OPTIONS : TEXT_TARGET_OPTIONS;
     } else {
       // Dragging from a target handle (input), need nodes with source handles (outputs)
       if (handleType === "video") return VIDEO_SOURCE_OPTIONS;
       if (handleType === "audio") return AUDIO_SOURCE_OPTIONS;
       if (handleType === "3d") return THREE_D_SOURCE_OPTIONS;
+      if (handleType === "easeCurve") return EASE_CURVE_SOURCE_OPTIONS;
       return handleType === "image" ? IMAGE_SOURCE_OPTIONS : TEXT_SOURCE_OPTIONS;
     }
   }, [handleType, connectionType]);

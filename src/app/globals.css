@@ -178,11 +178,11 @@ body {
 
 /* Right handles - positioned outside node with padding from edge */
 .react-flow__handle-right {
-  right: -88px;
+  right: -32px;
   left: auto;
   top: 50%;
   height: 96px;
-  transform: translate(88px, -50%);
+  transform: translate(32px, -50%);
 }
 
 .react-flow__handle-right::after {
@@ -192,16 +192,53 @@ body {
 
 /* Left handles - positioned outside node with padding from edge */
 .react-flow__handle-left {
-  left: -88px;
+  left: -32px;
   right: auto;
   top: 50%;
   height: 96px;
-  transform: translate(-88px, -50%);
+  transform: translate(-32px, -50%);
 }
 
 .react-flow__handle-left::after {
   width: 24px;
   height: 24px;
+}
+
+/* Force connector spacing outside nodes (all nodes except prompt). */
+.react-flow__node:not(.react-flow__node-prompt) .react-flow__handle.react-flow__handle-right,
+.react-flow__node-default:not(.react-flow__node-prompt) .react-flow__handle.react-flow__handle-right,
+.react-flow__node-output:not(.react-flow__node-prompt) .react-flow__handle.react-flow__handle-right {
+  right: -32px !important;
+  left: auto !important;
+  transform: translate(32px, -50%) !important;
+}
+
+.react-flow__node:not(.react-flow__node-prompt) .react-flow__handle.react-flow__handle-left,
+.react-flow__node-default:not(.react-flow__node-prompt) .react-flow__handle.react-flow__handle-left,
+.react-flow__node-output:not(.react-flow__node-prompt) .react-flow__handle.react-flow__handle-left {
+  left: -32px !important;
+  right: auto !important;
+  transform: translate(-32px, -50%) !important;
+}
+
+/* Non-prompt: connectors always visible. Prompt: RF adds .react-flow__node-prompt — keep hidden until hover/select above. */
+.react-flow__node:not(.react-flow__node-prompt) .react-flow__handle {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+.react-flow__node-prompt .react-flow__handle {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.react-flow__node-prompt:hover .react-flow__handle,
+.react-flow__node-prompt.selected .react-flow__handle {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
 
 /* Prompt/text handles - blue (same as before) */
