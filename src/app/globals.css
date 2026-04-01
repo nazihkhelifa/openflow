@@ -52,6 +52,16 @@ body {
   touch-action: none;
 }
 
+/*
+ * XY Flow dark mode defaults paint handles with #bebebe + border — with our tall left/right
+ * hit strips that reads as a grey oval behind the custom ::after icon. Force transparent.
+ */
+.react-flow.dark,
+.react-flow.light {
+  --xy-handle-background-color-default: transparent;
+  --xy-handle-border-color-default: transparent;
+}
+
 /* Let custom dot canvas show through the pane (light + dark; pane must stay transparent) */
 .react-flow__renderer,
 .react-flow__pane {
@@ -121,9 +131,11 @@ body {
   min-width: 24px !important;
   min-height: 24px !important;
   border-radius: 50%;
-  border: none;
+  border: none !important;
   box-shadow: none;
   background: transparent !important;
+  background-color: transparent !important;
+  outline: none !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -132,6 +144,15 @@ body {
   opacity: 0 !important;
   pointer-events: none !important;
   visibility: hidden;
+}
+
+.react-flow__handle.connectionindicator,
+.react-flow__handle.connectingfrom {
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* Visible only when node is selected or hovered */
@@ -171,6 +192,10 @@ body {
   width: 48px;
   height: 96px;
   border-radius: 24px;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 /* Circle-plus icon */
