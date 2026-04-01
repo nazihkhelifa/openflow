@@ -1,19 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
 import { ReferenceEdge } from "@/components/edges/ReferenceEdge";
 import { ReactFlowProvider, Position } from "@xyflow/react";
-
-// Mock the workflow store
-const mockUseWorkflowStore = vi.fn();
-
-vi.mock("@/store/workflowStore", () => ({
-  useWorkflowStore: (selector?: (state: unknown) => unknown) => {
-    if (selector) {
-      return mockUseWorkflowStore(selector);
-    }
-    return mockUseWorkflowStore((s: unknown) => s);
-  },
-}));
 
 // Wrapper component for React Flow context
 function TestWrapper({ children }: { children: React.ReactNode }) {
@@ -39,22 +27,7 @@ const createDefaultProps = (overrides = {}) => ({
   ...overrides,
 });
 
-// Default store state factory
-const createDefaultState = (overrides = {}) => ({
-  edgeStyle: "angular" as const,
-  nodes: [],
-  ...overrides,
-});
-
 describe("ReferenceEdge", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    // Default mock implementation
-    mockUseWorkflowStore.mockImplementation((selector) => {
-      return selector(createDefaultState());
-    });
-  });
-
   describe("Basic Rendering", () => {
     it("should render the edge path", () => {
       const { container } = render(
@@ -108,16 +81,16 @@ describe("ReferenceEdge", () => {
   });
 
   describe("Gray Color", () => {
-    it("should render with gray color gradient", () => {
+    it("should render with solid reference stroke color", () => {
       const { container } = render(
         <TestWrapper>
           <ReferenceEdge {...createDefaultProps()} />
         </TestWrapper>
       );
 
-      const gradientStop = container.querySelector("linearGradient stop");
-      expect(gradientStop).toBeInTheDocument();
-      expect(gradientStop?.getAttribute("stop-color")).toBe("#52525b");
+      const edgePath = container.querySelector(".react-flow__edge-path");
+      expect(edgePath).toBeInTheDocument();
+      expect(edgePath).toHaveStyle({ stroke: "#a1a1aa" });
     });
   });
 
@@ -151,62 +124,6 @@ describe("ReferenceEdge", () => {
     });
   });
 
-  describe("Selection State", () => {
-    it("should have brighter opacity when connected to selected node", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          nodes: [{ id: "node-1", selected: true }],
-        }));
-      });
-
-      const { container } = render(
-        <TestWrapper>
-          <ReferenceEdge {...createDefaultProps()} />
-        </TestWrapper>
-      );
-
-      const stops = Array.from(container.querySelectorAll("stop"));
-      expect(stops.length).toBeGreaterThan(0);
-      expect(stops[0]?.getAttribute("stop-opacity")).toBe("1");
-    });
-
-    it("should have dimmed opacity when not connected to selected node", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          nodes: [{ id: "node-3", selected: true }], // Different node selected
-        }));
-      });
-
-      const { container } = render(
-        <TestWrapper>
-          <ReferenceEdge {...createDefaultProps()} />
-        </TestWrapper>
-      );
-
-      const stops = Array.from(container.querySelectorAll("stop"));
-      expect(stops.length).toBeGreaterThan(0);
-      expect(stops[0]?.getAttribute("stop-opacity")).toBe("0.25");
-    });
-
-    it("should be dimmed when no nodes are selected", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          nodes: [], // No nodes at all
-        }));
-      });
-
-      const { container } = render(
-        <TestWrapper>
-          <ReferenceEdge {...createDefaultProps()} />
-        </TestWrapper>
-      );
-
-      const stops = Array.from(container.querySelectorAll("stop"));
-      expect(stops.length).toBeGreaterThan(0);
-      expect(stops[0]?.getAttribute("stop-opacity")).toBe("0.25");
-    });
-  });
-
   describe("Stroke Width", () => {
     it("should render with thinner stroke than editable edges", () => {
       const { container } = render(
@@ -222,41 +139,4 @@ describe("ReferenceEdge", () => {
     });
   });
 
-  describe("Connection to Source and Target", () => {
-    it("should highlight when source node is selected", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          nodes: [{ id: "node-1", selected: true }],
-        }));
-      });
-
-      const { container } = render(
-        <TestWrapper>
-          <ReferenceEdge {...createDefaultProps()} />
-        </TestWrapper>
-      );
-
-      const stops = Array.from(container.querySelectorAll("stop"));
-      expect(stops.length).toBeGreaterThan(0);
-      expect(stops[0]?.getAttribute("stop-opacity")).toBe("1");
-    });
-
-    it("should highlight when target node is selected", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          nodes: [{ id: "node-2", selected: true }],
-        }));
-      });
-
-      const { container } = render(
-        <TestWrapper>
-          <ReferenceEdge {...createDefaultProps()} />
-        </TestWrapper>
-      );
-
-      const stops = Array.from(container.querySelectorAll("stop"));
-      expect(stops.length).toBeGreaterThan(0);
-      expect(stops[0]?.getAttribute("stop-opacity")).toBe("1");
-    });
-  });
 });

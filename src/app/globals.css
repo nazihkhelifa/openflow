@@ -283,16 +283,12 @@ body {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23707070' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'%3E%3C/circle%3E%3Cpath d='M8 12h8'%3E%3C/path%3E%3Cpath d='M12 8v8'%3E%3C/path%3E%3C/svg%3E");
 }
 
+/* Stroke color/width come from edge components (EditableEdge, ReferenceEdge) — do not set stroke here or it fights inline styles after refresh. */
 .react-flow__edge-path {
-  stroke: #94a3b8;
-  stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-.react-flow__edge.selected .react-flow__edge-path,
-.react-flow__edge:hover .react-flow__edge-path {
-  stroke: #3b82f6;
+  /* Ensure no other stylesheet or parent opacity hides connection lines */
+  opacity: 1 !important;
 }
 
 /* Hide resize handles but show resize cursor on edges */

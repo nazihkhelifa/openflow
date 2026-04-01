@@ -155,9 +155,9 @@ describe("EditableEdge", () => {
         </TestWrapper>
       );
 
-      const gradientStop = container.querySelector("linearGradient stop");
-      expect(gradientStop).toBeInTheDocument();
-      expect(gradientStop?.getAttribute("stop-color")).toBe("#10b981");
+      const edgePath = container.querySelector(".react-flow__edge-path");
+      expect(edgePath).toBeInTheDocument();
+      expect(edgePath).toHaveStyle({ stroke: "#10b981" });
     });
 
     it("should use blue color for prompt handle type", () => {
@@ -167,9 +167,9 @@ describe("EditableEdge", () => {
         </TestWrapper>
       );
 
-      const gradientStop = container.querySelector("linearGradient stop");
-      expect(gradientStop).toBeInTheDocument();
-      expect(gradientStop?.getAttribute("stop-color")).toBe("#2563eb");
+      const edgePath = container.querySelector(".react-flow__edge-path");
+      expect(edgePath).toBeInTheDocument();
+      expect(edgePath).toHaveStyle({ stroke: "#2563eb" });
     });
 
     it("should use orange color when edge is paused", () => {
@@ -183,9 +183,9 @@ describe("EditableEdge", () => {
         </TestWrapper>
       );
 
-      const gradientStop = container.querySelector("linearGradient stop");
-      expect(gradientStop).toBeInTheDocument();
-      expect(gradientStop?.getAttribute("stop-color")).toBe("#ea580c");
+      const edgePath = container.querySelector(".react-flow__edge-path");
+      expect(edgePath).toBeInTheDocument();
+      expect(edgePath).toHaveStyle({ stroke: "#ea580c" });
     });
   });
 
@@ -285,46 +285,6 @@ describe("EditableEdge", () => {
       // No drag handles in curved mode
       const circles = container.querySelectorAll("circle[fill='white']");
       expect(circles.length).toBe(0);
-    });
-  });
-
-  describe("Selection State", () => {
-    it("should have brighter opacity when connected to selected node", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          nodes: [{ id: "node-1", selected: true }],
-        }));
-      });
-
-      const { container } = render(
-        <TestWrapper>
-          <EditableEdge {...createDefaultProps()} />
-        </TestWrapper>
-      );
-
-      const stops = Array.from(container.querySelectorAll("stop"));
-      expect(stops.length).toBeGreaterThan(0);
-      // Active edges have full opacity at ends
-      expect(stops[0]?.getAttribute("stop-opacity")).toBe("1");
-    });
-
-    it("should have dimmed opacity when not connected to selected node", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          nodes: [{ id: "node-3", selected: true }], // Different node selected
-        }));
-      });
-
-      const { container } = render(
-        <TestWrapper>
-          <EditableEdge {...createDefaultProps()} />
-        </TestWrapper>
-      );
-
-      const stops = Array.from(container.querySelectorAll("stop"));
-      expect(stops.length).toBeGreaterThan(0);
-      // Dimmed edges have lower opacity at ends
-      expect(stops[0]?.getAttribute("stop-opacity")).toBe("0.25");
     });
   });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, type CSSProperties } from "react";
 import {
   BaseEdge,
   EdgeProps,
@@ -16,12 +16,12 @@ interface EdgeData extends WorkflowEdgeData {
   offsetY?: number;
 }
 
-// Colors for different connection types (dimmed for softer appearance)
+// Colors for different connection types
 const EDGE_COLORS: Record<string, string> = {
-  // Match --handle-color-image (globals.css); light gray was nearly invisible at low gradient opacity
   image: "#10b981",
   prompt: "#2563eb", // Blue for prompt connections
-  default: "#64748b", // Gray for unknown
+  /** Fallback when handle ids are missing after load — must contrast with dark canvas */
+  default: "#94a3b8",
   pause: "#ea580c", // Orange for paused edges
   reference: "#52525b", // Gray for reference connections
   video: "#a855f7", // Purple for video connections
@@ -29,7 +29,70 @@ const EDGE_COLORS: Record<string, string> = {
   text: "#2563eb", // Blue for text connections
   "3d": "#06b6d4", // Cyan for 3D connections
   easeCurve: "#f59e0b", // Amber for ease curve connections
+  /** Router / switch single input */
+  "generic-input": "#64748b",
 };
+
+/** Resolve stroke color from handle ids (persisted edges may omit one side; schema uses image-0, text-1, etc.). */
+function resolveEdgeColorFromHandles(
+  sourceHandleId: string | null | undefined,
+  targetHandleId: string | null | undefined,
+  hasPause: boolean
+): string {
+  if (hasPause) return EDGE_COLORS.pause;
+  const candidates = [sourceHandleId, targetHandleId].filter(
+    (x): x is string => typeof x === "string" && x.length > 0
+  );
+  for (const raw of candidates) {
+    const stripped = raw.replace(/-\d+$/, "");
+    if (stripped && EDGE_COLORS[stripped]) return EDGE_COLORS[stripped];
+    const head = raw.split("-")[0];
+    if (head && EDGE_COLORS[head]) return EDGE_COLORS[head];
+    // e.g. image frame handles (image-frame-0)
+    if (raw.includes("frame") && !raw.toLowerCase().includes("timeframe")) {
+      return EDGE_COLORS.image;
+    }
+  }
+  return EDGE_COLORS.default;
+}
+
+/** When handles are missing from persisted edges, infer stroke from the source node type. */
+function inferEdgeColorFromSourceNodeType(
+  nodeType: string | undefined | null
+): string | null {
+  switch (nodeType) {
+    case "prompt":
+      return EDGE_COLORS.text;
+    case "mediaInput":
+    case "annotation":
+    case "generateImage":
+    case "cameraAngleControl":
+    case "glbViewer":
+    case "imageCompare":
+      return EDGE_COLORS.image;
+    case "generateVideo":
+      return EDGE_COLORS.video;
+    case "generateAudio":
+      return EDGE_COLORS.audio;
+    case "generate3d":
+      return EDGE_COLORS["3d"];
+    case "easeCurve":
+      return EDGE_COLORS.easeCurve;
+    default:
+      return null;
+  }
+}
+
+/** Persisted React Flow edges sometimes carry strokeOpacity/opacity that hide the line after reload. */
+function sanitizeEdgeStyleForStroke(style: CSSProperties | undefined): CSSProperties {
+  if (!style || typeof style !== "object") return {};
+  const {
+    strokeOpacity: _so,
+    opacity: _op,
+    ...rest
+  } = style as CSSProperties & { strokeOpacity?: unknown; opacity?: unknown };
+  return rest;
+}
 
 export function EditableEdge({
   id,
@@ -52,13 +115,6 @@ export function EditableEdge({
   const edgeStyle = useWorkflowStore((state) => state.edgeStyle);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Narrow selector: returns boolean, only re-renders when selection relevance changes
-  const isConnectedToSelection = useWorkflowStore((state) => {
-    const selectedNodes = state.nodes.filter((n) => n.selected);
-    if (selectedNodes.length === 0) return false;
-    return selectedNodes.some((n) => n.id === source || n.id === target);
-  });
-
   const edgeData = data as EdgeData | undefined;
   const offsetX = edgeData?.offsetX ?? 0;
   const offsetY = edgeData?.offsetY ?? 0;
@@ -71,19 +127,33 @@ export function EditableEdge({
     return (targetNode.data as NanoBananaNodeData).status === "loading";
   });
 
-  // Determine edge color based on handle type (orange if paused)
-  const edgeColor = useMemo(() => {
-    if (hasPause) return EDGE_COLORS.pause;
-    // Use source handle to determine color (or target if source is not available)
-    // Strip numeric suffixes (e.g., "image-0" -> "image") for lookup
-    const handleType = sourceHandleId || targetHandleId || "";
-    const normalizedType = handleType.replace(/-\d+$/, "");
-    return EDGE_COLORS[normalizedType] || EDGE_COLORS.default;
-  }, [hasPause, sourceHandleId, targetHandleId]);
+  const sourceNodeType = useWorkflowStore((state) =>
+    state.nodes.find((n) => n.id === source)?.type
+  );
 
-  // Per-edge gradient defs (must live in the same SVG as the path)
-  const gradientId = useMemo(() => `edge-grad-${id}`, [id]);
-  const gradientOpacity = isConnectedToSelection ? { a: 1, mid: 0.55 } : { a: 0.25, mid: 0.1 };
+  const edgeColor = useMemo(() => {
+    const fromHandles = resolveEdgeColorFromHandles(
+      sourceHandleId,
+      targetHandleId,
+      hasPause
+    );
+    if (fromHandles !== EDGE_COLORS.default) return fromHandles;
+    const inferred = inferEdgeColorFromSourceNodeType(sourceNodeType);
+    return inferred ?? fromHandles;
+  }, [hasPause, sourceHandleId, targetHandleId, sourceNodeType]);
+
+  const visibleStrokeStyle = useMemo(() => {
+    const base = sanitizeEdgeStyleForStroke(style);
+    return {
+      ...base,
+      stroke: edgeColor,
+      strokeWidth: selected ? 4 : 3,
+      strokeLinecap: "round" as const,
+      strokeLinejoin: "round" as const,
+      strokeOpacity: 1,
+      opacity: 1,
+    };
+  }, [style, edgeColor, selected]);
 
   // Calculate the path based on edge style
   const [edgePath, labelX, labelY] = useMemo(() => {
@@ -186,24 +256,11 @@ export function EditableEdge({
 
   return (
     <>
-      <defs>
-        <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor={edgeColor} stopOpacity={gradientOpacity.a} />
-          <stop offset="50%" stopColor={edgeColor} stopOpacity={gradientOpacity.mid} />
-          <stop offset="100%" stopColor={edgeColor} stopOpacity={gradientOpacity.a} />
-        </linearGradient>
-      </defs>
       <BaseEdge
         id={id}
         path={edgePath}
         markerEnd={markerEnd}
-        style={{
-          ...style,
-          stroke: `url(#${gradientId})`,
-          strokeWidth: 3,
-          strokeLinecap: "round",
-          strokeLinejoin: "round",
-        }}
+        style={visibleStrokeStyle}
       />
 
       {/* Animated pulse overlay when target is loading */}
@@ -213,7 +270,7 @@ export function EditableEdge({
           <path
             d={edgePath}
             fill="none"
-            stroke={`url(#${gradientId})`}
+            stroke={edgeColor}
             strokeWidth={20}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -223,7 +280,7 @@ export function EditableEdge({
           <path
             d={edgePath}
             fill="none"
-            stroke={`url(#${gradientId})`}
+            stroke={edgeColor}
             strokeWidth={12}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -233,7 +290,7 @@ export function EditableEdge({
           <path
             d={edgePath}
             fill="none"
-            stroke={`url(#${gradientId})`}
+            stroke={edgeColor}
             strokeWidth={5}
             strokeLinecap="round"
             strokeLinejoin="round"
