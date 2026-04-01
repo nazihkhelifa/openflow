@@ -44,6 +44,7 @@ import {
   SquarePlus,
   History,
   MoreHorizontal,
+  X,
 } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import {
@@ -875,12 +876,17 @@ export function FlowyAgentPanel({
   activeSessionIdRef.current = activeSessionId;
   /** Thread chosen in the bottom history rail: next composer send forks a new session and passes this thread's messages into the planner (capped). */
   const [continuationSourceSessionId, setContinuationSourceSessionId] = useState<string | null>(null);
+  /** Sidebar + composer: expanded details for “attached thread history”. */
+  const [continuationBannerExpanded, setContinuationBannerExpanded] = useState(false);
   useEffect(() => {
     if (!continuationSourceSessionId) return;
     if (!sessions.some((s) => s.id === continuationSourceSessionId)) {
       setContinuationSourceSessionId(null);
     }
   }, [continuationSourceSessionId, sessions]);
+  useEffect(() => {
+    if (!continuationSourceSessionId) setContinuationBannerExpanded(false);
+  }, [continuationSourceSessionId]);
 
   const updateSessionMessages = useCallback((sessionId: string, updater: (prev: ChatMsg[]) => ChatMsg[]) => {
     setSessions((prev) =>
@@ -2384,6 +2390,14 @@ export function FlowyAgentPanel({
     return s?.title ?? null;
   }, [continuationSourceSessionId, sessions]);
 
+  const continuationSourceSession = useMemo(
+    () =>
+      continuationSourceSessionId
+        ? sessions.find((x) => x.id === continuationSourceSessionId)
+        : undefined,
+    [continuationSourceSessionId, sessions]
+  );
+
   const threadActionsForSession = useMemo(
     () =>
       threadRowMenuSessionId
@@ -2748,9 +2762,14 @@ export function FlowyAgentPanel({
               isRunning={isRunning}
               chatInputPlaceholder={chatInputPlaceholder}
               continuationTitle={continuationThreadTitle}
+              continuationExpanded={continuationBannerExpanded}
+              onContinuationExpandedChange={setContinuationBannerExpanded}
               onClearContinuation={
                 continuationSourceSessionId
-                  ? () => setContinuationSourceSessionId(null)
+                  ? () => {
+                      setContinuationSourceSessionId(null);
+                      setFlowyHistoryHighlight(null);
+                    }
                   : undefined
               }
               contextNodeChips={contextNodeChips}
@@ -2822,6 +2841,7 @@ export function FlowyAgentPanel({
                               setFlowyHistoryHighlight(null);
                             } else {
                               setContinuationSourceSessionId(s.id);
+                              setContinuationBannerExpanded(true);
                               switchToSession(s.id);
                               const snap = findLastCanvasSnapshotInSession(s);
                               if (snap?.nodes?.length) {
@@ -3120,6 +3140,65 @@ export function FlowyAgentPanel({
             </div>
           );
         })}
+
+        {continuationSourceSessionId && continuationThreadTitle ? (
+          <div className="mx-4 mt-1 rounded-xl border border-purple-400/25 bg-purple-950/30 ring-1 ring-inset ring-white/[0.06]">
+            <div className="flex items-start gap-1 px-3 py-2.5">
+              <button
+                type="button"
+                onClick={() => setContinuationBannerExpanded((v) => !v)}
+                className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg text-purple-200/85 transition-colors hover:bg-purple-500/15 hover:text-purple-50"
+                aria-expanded={continuationBannerExpanded}
+                aria-controls="flowy-sidebar-continuation-detail"
+                title={continuationBannerExpanded ? "Collapse" : "Expand"}
+              >
+                <ChevronRight
+                  className={`size-4 transition-transform duration-200 ${
+                    continuationBannerExpanded ? "rotate-90" : ""
+                  }`}
+                  strokeWidth={2}
+                  aria-hidden
+                />
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-purple-300/90">
+                  Attached thread history
+                </p>
+                <p className="truncate text-sm font-medium text-purple-100">{continuationThreadTitle}</p>
+                {continuationBannerExpanded ? (
+                  <div
+                    id="flowy-sidebar-continuation-detail"
+                    className="mt-2 space-y-2 text-xs leading-relaxed text-neutral-400"
+                  >
+                    <p>
+                      Your <span className="text-neutral-200">next message</span> starts a new chat thread. Flowy
+                      receives the capped message history from this thread, then your new prompt.
+                    </p>
+                    {continuationSourceSession ? (
+                      <p className="text-[11px] text-neutral-500">
+                        Source: {continuationSourceSession.messages.length} message
+                        {continuationSourceSession.messages.length === 1 ? "" : "s"} in &ldquo;
+                        {continuationThreadTitle}&rdquo;.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setContinuationSourceSessionId(null);
+                  setFlowyHistoryHighlight(null);
+                }}
+                className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-purple-400/20 text-purple-200/75 transition-colors hover:bg-purple-500/15 hover:text-purple-50"
+                aria-label="Detach thread history"
+                title="Detach"
+              >
+                <X className="size-3.5" strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {(isPlanning ||
           plannerStageEvent != null ||

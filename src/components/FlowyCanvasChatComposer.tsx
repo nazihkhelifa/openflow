@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
-import { AtSign, Paperclip, X } from "lucide-react";
+import { useId, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { AtSign, ChevronRight, Paperclip, X } from "lucide-react";
 import {
   FLOWY_PLANNER_LLM_OPTIONS,
   flowyPlannerLlmOptionId,
@@ -36,6 +36,9 @@ export type FlowyCanvasChatComposerProps = {
   /** Thread selected in history rail — next composer send will fork and merge this thread’s capped history into the planner payload. */
   continuationTitle?: string | null;
   onClearContinuation?: () => void;
+  /** Sync expand/collapse with sidebar “attached history” panel (optional). */
+  continuationExpanded?: boolean;
+  onContinuationExpandedChange?: (expanded: boolean) => void;
   contextNodeChips: FlowyContextNodeChip[];
   onRemoveMentionedNode: (nodeId: string) => void;
   imageAttachments: FlowyChatImageAttachment[];
@@ -64,6 +67,8 @@ export function FlowyCanvasChatComposer({
   chatInputPlaceholder,
   continuationTitle,
   onClearContinuation,
+  continuationExpanded: continuationExpandedProp,
+  onContinuationExpandedChange,
   contextNodeChips,
   onRemoveMentionedNode,
   imageAttachments,
@@ -80,6 +85,10 @@ export function FlowyCanvasChatComposer({
   const generatedTextareaId = useId();
   const inputId = textareaId ?? generatedTextareaId;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [continuationExpandedInternal, setContinuationExpandedInternal] = useState(false);
+  const continuationExpanded =
+    continuationExpandedProp !== undefined ? continuationExpandedProp : continuationExpandedInternal;
+  const setContinuationExpanded = onContinuationExpandedChange ?? setContinuationExpandedInternal;
   const modeSliderIndex = useMemo(() => (flowyAgentMode === "assist" ? 0 : 1), [flowyAgentMode]);
   const agentBusy = isPlanning || isExecutingStep || isRunning;
 
@@ -103,22 +112,47 @@ export function FlowyCanvasChatComposer({
         <div className="flex w-full flex-col gap-2.5">
           {continuationTitle ? (
             <div
-              className="-mt-1 rounded-xl border border-purple-400/20 bg-purple-950/30 px-2 py-1.5 shadow-none ring-1 ring-inset ring-white/5"
-              role="status"
-              aria-live="polite"
-              aria-label={`Selected thread: ${continuationTitle}`}
+              className="-mt-1 rounded-xl border border-purple-400/20 bg-purple-950/30 shadow-none ring-1 ring-inset ring-white/5"
+              role="region"
+              aria-label={`Attached thread history: ${continuationTitle}`}
             >
-              <div className="flex items-center gap-2">
-                <p className="min-w-0 flex-1 truncate text-[12px] font-medium leading-snug text-purple-100/90">
-                  {continuationTitle}
-                </p>
+              <div className="flex items-start gap-1 px-2 py-1.5">
+                <button
+                  type="button"
+                  onClick={() => setContinuationExpanded(!continuationExpanded)}
+                  className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg text-purple-200/80 transition-colors hover:bg-purple-500/15 hover:text-purple-100"
+                  aria-expanded={continuationExpanded}
+                  aria-controls="flowy-composer-continuation-detail"
+                  title={continuationExpanded ? "Collapse details" : "Expand details"}
+                >
+                  <ChevronRight
+                    className={`size-4 transition-transform duration-200 ${continuationExpanded ? "rotate-90" : ""}`}
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-purple-300/85">
+                    Attached thread history
+                  </p>
+                  <p className="truncate text-[12px] font-medium leading-snug text-purple-100/90">{continuationTitle}</p>
+                  {continuationExpanded ? (
+                    <p
+                      id="flowy-composer-continuation-detail"
+                      className="mt-1.5 text-[11px] leading-relaxed text-purple-200/70"
+                    >
+                      Your next send starts a new chat thread and includes this thread&apos;s capped history in Flowy&apos;s
+                      context (plus your message below).
+                    </p>
+                  ) : null}
+                </div>
                 {onClearContinuation ? (
                   <button
                     type="button"
                     onClick={onClearContinuation}
                     className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-purple-400/15 text-purple-200/70 transition-colors hover:bg-purple-500/15 hover:text-purple-100"
-                    aria-label="Clear selected thread context"
-                    title="Clear"
+                    aria-label="Detach thread history"
+                    title="Detach"
                   >
                     <X className="size-3.5" strokeWidth={2} aria-hidden />
                   </button>
